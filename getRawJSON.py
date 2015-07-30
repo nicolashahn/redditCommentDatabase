@@ -32,7 +32,12 @@ def connect(username, password, database):
 # general function to create tables
 # name = table name
 # cols = list of tuples = (name of col, type)
-def createTable(name, cols):
+def createTable(tname, cols):
+	__tablename__ = tname
+
+	for cname, ctype in cols:
+		if ctype.__class__ == 'int':
+			print cname
 
 	pass
 
@@ -41,6 +46,15 @@ def createTable(name, cols):
 # username = varchar(30)
 def insertAuthor(dataset, id, username):
 	pass
+
+
+class Author(Base):
+	__tablename__ = 'authors'
+
+	dataset_id = s.Column(s.Integer, primary_key=True)
+	author_id = s.Column(s.Integer, primary_key=True)
+	username = s.Column(s.Varchar)
+
 
 
 def main():
@@ -53,7 +67,10 @@ def main():
 	# raw text -> json dicts
 	data = open('sampleComments','r',)
 	jobjs = jsonDataToDict(data)
+
+	# print fields, types
 	( [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])] )
+	# what type is 'distinguished'? it's always null
 
 	
 
