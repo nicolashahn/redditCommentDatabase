@@ -1,0 +1,3 @@
+how to store markup (bold, italic, etc)
+figure out parent_id prefixes
+decide which fields to include in MySQL
