@@ -21,6 +21,9 @@ Session = s.orm.sessionmaker()
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
 
+# for auto-incrementer
+autoinc = 0
+
 ###################################
 # JSON data manipulation
 ###################################
@@ -54,6 +57,13 @@ def createAuthor(dataset, id, username):
 
 	pass
 
+def autoIncrement():
+	global autoinc
+	autoinc += 1
+	return autoinc
+
+def resetAutoIncrement():
+	autoinc = 0
 
 ####################################
 # Table Classes
@@ -63,7 +73,7 @@ class Author(Base):
 	__tablename__ = 'authors'
 
 	dataset_id = s.Column(mysql.TINYINT(3), primary_key=True)
-	author_id = s.Column(mysql.INTEGER(20), primary_key=True)
+	author_id = s.Column(mysql.INTEGER(20), primary_key=True, default=autoIncrement)
 	username = s.Column(mysql.VARCHAR(255))
 
 
@@ -78,7 +88,7 @@ def createTableObjects(jobj,session):
 	author = Author(
 		dataset_id = reddit_id, 
 		# sqlalchemy auto-increments primary keys by default
-		# author_id  = jobj[""]
+		# author_id = 
 		username   = jobj["author"] 
 		)
 	print(jobj["author"])
@@ -110,7 +120,7 @@ def main():
 
 	# uncomment to show all fields + types
 	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
-	
+
 	# show fields with actual values
 	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
 	# what type is 'distinguished'? it's always null
