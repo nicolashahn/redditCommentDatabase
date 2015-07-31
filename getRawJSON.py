@@ -6,6 +6,7 @@ import json
 import sqlalchemy as s
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects import mysql
+import sys
 
 
 ###################################
@@ -14,9 +15,6 @@ from sqlalchemy.dialects import mysql
 
 # create base table class
 Base = declarative_base()
-
-# start unbound session - bind in main()
-Session = s.orm.sessionmaker()
 
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
@@ -45,7 +43,7 @@ def jsonDataToDict(data):
 # open connection to database
 # then return engine object
 def connect(username, password, database):
-	db_uri = 'mysql://{}:{}@localhost/{}'.format(username, password, database)
+	db_uri = 'mysql://{}:{}@{}'.format(username, password, database)
 	engine = s.create_engine(db_uri)
 	engine.connect()
 	return engine
@@ -53,10 +51,10 @@ def connect(username, password, database):
 # dataset = tinyint(3)
 # id = integer(20)
 # username = varchar(255)
-def createAuthor(dataset, id, username):
+# def createAuthor(dataset, id, username):
+# 	pass
 
-	pass
-
+# have python do the auto-incrementation
 def autoIncrement():
 	global autoinc
 	autoinc += 1
@@ -78,7 +76,8 @@ class Author(Base):
 
 
 ####################################
-# Table Tasks
+# Single table object tasks
+# operates on a single post object
 ####################################
 
 # take a single json dictionary object
@@ -108,28 +107,41 @@ def createTableObjects(jobj,session):
 # 	pass
 
 def main():
+
+	if len(sys.argv) != 5:
+		print("Incorrect number of arguments given")
+		print("Usage: python getRawJSON [username] [password] [JSON data file] [host/database name]")
+		print("Example: python getRawJSON root password sampleComments localhost/reddit")
+		sys.exit(1)
+
+	user = sys.argv[1]
+	pword = sys.argv[2]
+	data = sys.argv[3]
+	db = sys.argv[4]
 	
 	# raw text -> json dicts
-	data = open('sampleComments','r',)
+	data = open(data,'r',)
 	jobjs = jsonDataToDict(data)
 
 	# connect to server, bind metadata
-	eng = connect('root','nbhnbh','reddit')
+	eng = connect(user, pword, db)
 	metadata = s.MetaData(bind=eng)
 	print(metadata)
 
 	# uncomment to show all fields + types
 	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
 
-	# show fields with actual values
+	# show fields with actual example values
 	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
 	# what type is 'distinguished'? it's always null
 
+	# start unbound session - bind in main()
+	Session = s.orm.sessionmaker()
 	# configure session, create session instance
 	Session.configure(bind=eng)
 	session = Session()
 
-	# now ready to start pushing to database
+	# now ready to start inserting to database
 	for jobj in jobjs:
 		createTableObjects(jobj,session)
 		session.commit()
