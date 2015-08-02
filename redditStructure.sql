@@ -85,131 +85,131 @@ CREATE TABLE `constituencyparses` (
 -- Table structure for table `convinceme_discussion_stance_votes`
 --
 
-DROP TABLE IF EXISTS `convinceme_discussion_stance_votes`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `convinceme_discussion_stance_votes` (
-  `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `discussion_stance_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `votes` int(10) unsigned DEFAULT NULL,
-  PRIMARY KEY (`dataset_id`,`discussion_id`,`discussion_stance_id`),
-  CONSTRAINT `convinceme_discussion_stance_votes_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
-  CONSTRAINT `convinceme_discussion_stance_votes_ibfk_2` FOREIGN KEY (`dataset_id`, `discussion_id`, `discussion_stance_id`) REFERENCES `discussion_stances` (`dataset_id`, `discussion_id`, `discussion_stance_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- DROP TABLE IF EXISTS `convinceme_discussion_stance_votes`;
+-- /*!40101 SET @saved_cs_client     = @@character_set_client */;
+-- /*!40101 SET character_set_client = utf8 */;
+-- CREATE TABLE `convinceme_discussion_stance_votes` (
+--   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `discussion_stance_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `votes` int(10) unsigned DEFAULT NULL,
+--   PRIMARY KEY (`dataset_id`,`discussion_id`,`discussion_stance_id`),
+--   CONSTRAINT `convinceme_discussion_stance_votes_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
+--   CONSTRAINT `convinceme_discussion_stance_votes_ibfk_2` FOREIGN KEY (`dataset_id`, `discussion_id`, `discussion_stance_id`) REFERENCES `discussion_stances` (`dataset_id`, `discussion_id`, `discussion_stance_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+-- /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `convoteauthorsextras`
 --
 
-DROP TABLE IF EXISTS `convoteauthorsextras`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `convoteauthorsextras` (
-  `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `author_id` int(10) unsigned NOT NULL DEFAULT '0',
-  `party` enum('D','R','I','X') DEFAULT NULL,
-  PRIMARY KEY (`dataset_id`,`author_id`),
-  CONSTRAINT `convoteAuthorsExtras_ibfk_1` FOREIGN KEY (`dataset_id`, `author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- DROP TABLE IF EXISTS `convoteauthorsextras`;
+-- /*!40101 SET @saved_cs_client     = @@character_set_client */;
+-- /*!40101 SET character_set_client = utf8 */;
+-- CREATE TABLE `convoteauthorsextras` (
+--   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `author_id` int(10) unsigned NOT NULL DEFAULT '0',
+--   `party` enum('D','R','I','X') DEFAULT NULL,
+--   PRIMARY KEY (`dataset_id`,`author_id`),
+--   CONSTRAINT `convoteAuthorsExtras_ibfk_1` FOREIGN KEY (`dataset_id`, `author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `convoteconcatenatedpostsextras`
 --
 
-DROP TABLE IF EXISTS `convoteconcatenatedpostsextras`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `convoteconcatenatedpostsextras` (
-  `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `author_id` int(10) unsigned NOT NULL DEFAULT '0',
-  `raw_score` float DEFAULT NULL,
-  `normalized_score` float DEFAULT NULL,
-  `link_strength` smallint(5) unsigned DEFAULT NULL,
-  PRIMARY KEY (`dataset_id`,`discussion_id`,`author_id`),
-  KEY `dataset_id` (`dataset_id`,`author_id`),
-  CONSTRAINT `convoteConcatenatedPostsExtras_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
-  CONSTRAINT `convoteConcatenatedPostsExtras_ibfk_2` FOREIGN KEY (`dataset_id`, `author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- DROP TABLE IF EXISTS `convoteconcatenatedpostsextras`;
+-- /*!40101 SET @saved_cs_client     = @@character_set_client */;
+-- /*!40101 SET character_set_client = utf8 */;
+-- CREATE TABLE `convoteconcatenatedpostsextras` (
+--   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `author_id` int(10) unsigned NOT NULL DEFAULT '0',
+--   `raw_score` float DEFAULT NULL,
+--   `normalized_score` float DEFAULT NULL,
+--   `link_strength` smallint(5) unsigned DEFAULT NULL,
+--   PRIMARY KEY (`dataset_id`,`discussion_id`,`author_id`),
+--   KEY `dataset_id` (`dataset_id`,`author_id`),
+--   CONSTRAINT `convoteConcatenatedPostsExtras_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
+--   CONSTRAINT `convoteConcatenatedPostsExtras_ibfk_2` FOREIGN KEY (`dataset_id`, `author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `convotementions`
 --
 
-DROP TABLE IF EXISTS `convotementions`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `convotementions` (
-  `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `post_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `text_id` int(10) unsigned DEFAULT NULL,
-  `text_index` int(10) unsigned NOT NULL DEFAULT '0',
-  `mention_author_id` int(10) unsigned DEFAULT NULL,
-  `useless_digit` tinyint(3) unsigned DEFAULT NULL,
-  `mention_name` char(26) DEFAULT NULL,
-  `raw_score` float DEFAULT NULL,
-  `normalized_score` float DEFAULT NULL,
-  `link_strength` smallint(5) unsigned DEFAULT NULL,
-  `high_precision_normalized_score` float DEFAULT NULL,
-  `high_precision_link_strength` smallint(5) unsigned DEFAULT NULL,
-  PRIMARY KEY (`dataset_id`,`discussion_id`,`post_id`,`text_index`),
-  KEY `dataset_id` (`dataset_id`,`mention_author_id`),
-  CONSTRAINT `convoteMentions_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
-  CONSTRAINT `convoteMentions_ibfk_2` FOREIGN KEY (`dataset_id`, `discussion_id`, `post_id`) REFERENCES `posts` (`dataset_id`, `discussion_id`, `post_id`),
-  CONSTRAINT `convoteMentions_ibfk_3` FOREIGN KEY (`dataset_id`, `mention_author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- DROP TABLE IF EXISTS `convotementions`;
+-- /*!40101 SET @saved_cs_client     = @@character_set_client */;
+-- /*!40101 SET character_set_client = utf8 */;
+-- CREATE TABLE `convotementions` (
+--   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `post_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `text_id` int(10) unsigned DEFAULT NULL,
+--   `text_index` int(10) unsigned NOT NULL DEFAULT '0',
+--   `mention_author_id` int(10) unsigned DEFAULT NULL,
+--   `useless_digit` tinyint(3) unsigned DEFAULT NULL,
+--   `mention_name` char(26) DEFAULT NULL,
+--   `raw_score` float DEFAULT NULL,
+--   `normalized_score` float DEFAULT NULL,
+--   `link_strength` smallint(5) unsigned DEFAULT NULL,
+--   `high_precision_normalized_score` float DEFAULT NULL,
+--   `high_precision_link_strength` smallint(5) unsigned DEFAULT NULL,
+--   PRIMARY KEY (`dataset_id`,`discussion_id`,`post_id`,`text_index`),
+--   KEY `dataset_id` (`dataset_id`,`mention_author_id`),
+--   CONSTRAINT `convoteMentions_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
+--   CONSTRAINT `convoteMentions_ibfk_2` FOREIGN KEY (`dataset_id`, `discussion_id`, `post_id`) REFERENCES `posts` (`dataset_id`, `discussion_id`, `post_id`),
+--   CONSTRAINT `convoteMentions_ibfk_3` FOREIGN KEY (`dataset_id`, `mention_author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `convotepostsextras`
 --
 
-DROP TABLE IF EXISTS `convotepostsextras`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `convotepostsextras` (
-  `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `post_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `stage_two` tinyint(1) DEFAULT NULL,
-  `stage_three` tinyint(1) DEFAULT NULL,
-  `yield_start` int(10) unsigned DEFAULT NULL,
-  `bill_mentioned` tinyint(1) DEFAULT NULL,
-  `filename` char(26) DEFAULT NULL,
-  `source_page` smallint(5) unsigned DEFAULT NULL,
-  `source_index` smallint(5) unsigned DEFAULT NULL,
-  `raw_score` float DEFAULT NULL,
-  `normalized_score` float DEFAULT NULL,
-  `link_strength` smallint(5) unsigned DEFAULT NULL,
-  PRIMARY KEY (`dataset_id`,`discussion_id`,`post_id`),
-  CONSTRAINT `convotePostsExtras_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
-  CONSTRAINT `convotePostsExtras_ibfk_2` FOREIGN KEY (`dataset_id`, `discussion_id`, `post_id`) REFERENCES `posts` (`dataset_id`, `discussion_id`, `post_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- DROP TABLE IF EXISTS `convotepostsextras`;
+-- /*!40101 SET @saved_cs_client     = @@character_set_client */;
+-- /*!40101 SET character_set_client = utf8 */;
+-- CREATE TABLE `convotepostsextras` (
+--   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `post_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `stage_two` tinyint(1) DEFAULT NULL,
+--   `stage_three` tinyint(1) DEFAULT NULL,
+--   `yield_start` int(10) unsigned DEFAULT NULL,
+--   `bill_mentioned` tinyint(1) DEFAULT NULL,
+--   `filename` char(26) DEFAULT NULL,
+--   `source_page` smallint(5) unsigned DEFAULT NULL,
+--   `source_index` smallint(5) unsigned DEFAULT NULL,
+--   `raw_score` float DEFAULT NULL,
+--   `normalized_score` float DEFAULT NULL,
+--   `link_strength` smallint(5) unsigned DEFAULT NULL,
+--   PRIMARY KEY (`dataset_id`,`discussion_id`,`post_id`),
+--   CONSTRAINT `convotePostsExtras_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
+--   CONSTRAINT `convotePostsExtras_ibfk_2` FOREIGN KEY (`dataset_id`, `discussion_id`, `post_id`) REFERENCES `posts` (`dataset_id`, `discussion_id`, `post_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `convotevotes`
 --
 
-DROP TABLE IF EXISTS `convotevotes`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `convotevotes` (
-  `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
-  `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
-  `author_id` int(10) unsigned NOT NULL DEFAULT '0',
-  `vote` tinyint(1) DEFAULT NULL,
-  PRIMARY KEY (`dataset_id`,`discussion_id`,`author_id`),
-  KEY `dataset_id` (`dataset_id`,`author_id`),
-  CONSTRAINT `convoteVotes_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
-  CONSTRAINT `convoteVotes_ibfk_2` FOREIGN KEY (`dataset_id`, `author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- DROP TABLE IF EXISTS `convotevotes`;
+-- /*!40101 SET @saved_cs_client     = @@character_set_client */;
+-- /*!40101 SET character_set_client = utf8 */;
+-- CREATE TABLE `convotevotes` (
+--   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
+--   `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
+--   `author_id` int(10) unsigned NOT NULL DEFAULT '0',
+--   `vote` tinyint(1) DEFAULT NULL,
+--   PRIMARY KEY (`dataset_id`,`discussion_id`,`author_id`),
+--   KEY `dataset_id` (`dataset_id`,`author_id`),
+--   CONSTRAINT `convoteVotes_ibfk_1` FOREIGN KEY (`dataset_id`, `discussion_id`) REFERENCES `discussions` (`dataset_id`, `discussion_id`),
+--   CONSTRAINT `convoteVotes_ibfk_2` FOREIGN KEY (`dataset_id`, `author_id`) REFERENCES `authors` (`dataset_id`, `author_id`)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `datasets`

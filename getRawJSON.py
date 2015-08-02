@@ -1,12 +1,16 @@
+# NLDS Lab
 # Nicolas Hahn
-# in: Raw Reddit JSON post objects in text format, one object per line
-# out: MySQL insertions for each object according to schema
+# A script to take raw Reddit JSON data and insert it into a MySQL database
+# input: Raw Reddit JSON post objects in text format, one object per line
+# output: MySQL insertions for each object according to schema
+# note to self: the 1 month dataset has 53,851,542 comments total, plan accordingly
 
 import json
 import sqlalchemy as s
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects import mysql
 import sys
+import re
 
 
 ###################################
@@ -18,9 +22,6 @@ Base = declarative_base()
 
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
-
-# for auto-incrementer
-autoinc = 0
 
 ###################################
 # JSON data manipulation
@@ -37,7 +38,7 @@ def jsonDataToDict(data):
 
 
 ###################################
-# MySQL setup helper functions
+# MySQL general helper functions
 ###################################
 
 # open connection to database
@@ -48,63 +49,133 @@ def connect(username, password, database):
 	engine.connect()
 	return engine
 
-# dataset = tinyint(3)
-# id = integer(20)
-# username = varchar(255)
-# def createAuthor(dataset, id, username):
-# 	pass
+# create a session from the engine
+def createSession(eng):
+	Session = s.orm.sessionmaker()
+	Session.configure(bind=eng)
+	session = Session()
+	return session
 
-# have python do the auto-incrementation
-def autoIncrement():
-	global autoinc
-	autoinc += 1
-	return autoinc
+# auto-incrementer class for id fields
+# each table class gets one
+class AutoInc():
+	def __init__(self):
+		self.i = 0
 
-def resetAutoIncrement():
-	autoinc = 0
+	def inc(self):
+		self.i += 1
+		return self.i
+
+	def reset(self):
+		self.i = 0
 
 ####################################
 # Table Classes
 ####################################
 
+# ALL JSON FIELDS IN AN OBJECT
+# archived <class 'bool'>
+# author <class 'str'>
+# author_flair_css_class <class 'str'>
+# author_flair_text <class 'str'>
+# body <class 'str'>
+# controversiality <class 'int'>
+# created_utc <class 'str'>
+# distinguished <class 'NoneType'>
+# downs <class 'int'>
+# edited <class 'bool'>
+# gilded <class 'int'>
+# id <class 'str'>
+# link_id <class 'str'>
+# name <class 'str'>
+# parent_id <class 'str'>
+# retrieved_on <class 'int'>
+# score <class 'int'>
+# score_hidden <class 'bool'>
+# subreddit <class 'str'>
+# subreddit_id <class 'str'>
+# ups <class 'int'>
+
+
 class Author(Base):
 	__tablename__ = 'authors'
+	authorInc = AutoInc()
 
-	dataset_id = s.Column(mysql.TINYINT(3), primary_key=True)
-	author_id = s.Column(mysql.INTEGER(20), primary_key=True, default=autoIncrement)
-	username = s.Column(mysql.VARCHAR(255))
+	dataset_id = s.Column(mysql.TINYINT(), primary_key=True)
+	author_id = s.Column(mysql.INTEGER(), primary_key=True, default=authorInc.inc())
+	# example schema has username as 255 chars - seems like too many
+	username = s.Column(mysql.VARCHAR(30))
+
+class Basic_Markup(Base):
+	__tablename__ = 'basic_markup'
+	markupInc = AutoInc()
+
+	dataset_id = s.Column(mysql.TINYINT(), primary_key=True)
+	text_id = s.Column(mysql.INTEGER())
+	markup_id = s.Column(mysql.INTEGER(), primary_key=True, default=markupInc.inc())
+	start = s.Column(mysql.INTEGER())
+	end = s.Column(mysql.INTEGER())
+	type_name = s.Column(mysql.VARCHAR(20))
+	attribute_str = s.Column(mysql.TEXT())
+
 
 
 ####################################
 # Single table object tasks
-# operates on a single post object
+# - operates on a single post object
 ####################################
 
 # take a single json dictionary object
-# create table objects
-# insert to database
-def createTableObjects(jobj,session):
+# load each json field data into the proper table object
+# add to session, push to db after all are added
+def createTableObjects(jobj, session):
+	createAuthorTableObject(jobj,session)
+	# finally, commit all table object to database
+	session.commit()
+
+def createAuthorTableObject(jobj, session):
 	author = Author(
 		dataset_id = reddit_id, 
 		# sqlalchemy auto-increments primary keys by default
 		# author_id = 
 		username   = jobj["author"] 
 		)
-	print(jobj["author"])
-	# session - insert to server here
 	session.add(author)
 
-# general function to create tables
-# name = table name
-# cols = list of tuples = (name of col, type)
-# def createTable(tname, cols):
-# 	__tablename__ = tname
+####################################
+# Markup
+# - get each instance of markup
+# 	- each time a bit of text is italic/bold/strikethough/etc
+# - turn into a basic_markup table object
+# - add to session
+####################################
 
-# 	for cname, ctype in cols:
-# 		if ctype.__class__ == 'int':
-# 			print(cname)
+# create a markup table object
+# for each slice of marked up text in the 'body' field
+# add to session
+def addMarkup(jobj, session):
+	body = jobj['body']
+	addItalics(body,session)
+	addBolds(body,session)
+	addStrikethroughs(body,session)
+	addQuotes(body,session)
 
-# 	pass
+def addItalics(body,session):
+	pass
+
+def addBolds(body,session):
+	pass
+
+def addStrikethroughs(body,session):
+	pass
+
+def addQuotes(body,session):
+	pass
+
+
+###################################
+# Program starts here
+###################################
 
 def main():
 
@@ -123,28 +194,23 @@ def main():
 	data = open(data,'r',)
 	jobjs = jsonDataToDict(data)
 
-	# connect to server, bind metadata
+	# connect to server, bind metadata, create session
 	eng = connect(user, pword, db)
 	metadata = s.MetaData(bind=eng)
-	print(metadata)
+	session = createSession(eng)
 
 	# uncomment to show all fields + types
-	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
+	[print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
 
 	# show fields with actual example values
 	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
-	# what type is 'distinguished'? it's always null
+	# what type is 'distinguished'? it's always null, probably bool
 
-	# start unbound session - bind in main()
-	Session = s.orm.sessionmaker()
-	# configure session, create session instance
-	Session.configure(bind=eng)
-	session = Session()
+	
 
 	# now ready to start inserting to database
 	for jobj in jobjs:
 		createTableObjects(jobj,session)
-		session.commit()
 	
 
 if __name__ == "__main__":
