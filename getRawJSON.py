@@ -28,10 +28,14 @@ reddit_id = 6
 ###################################
 
 # json text dump -> list of json-dicts
+# also encodes the line number the object in the raw file
 def jsonDataToDict(data):
 	jobjs = []
+	i = 0
 	for line in data:
+		i += 1
 		jline = json.loads(line)
+		jline['line_no'] = i
 		jobjs.append(jline)
 		# print([x+": "+str(jline[x]) for x in sorted(jline)])
 	return jobjs
@@ -153,24 +157,43 @@ def createAuthorTableObject(jobj, session):
 # create a markup table object
 # for each slice of marked up text in the 'body' field
 # add to session
-def addMarkup(jobj, session):
+def addMarkupObjects(jobj, session):
 	body = jobj['body']
-	addItalics(body,session)
-	addBolds(body,session)
-	addStrikethroughs(body,session)
-	addQuotes(body,session)
+	addMarkupObjectFromType("italic",'[/*]','[/*]',body,session)
+	addMarkupObjectFromType("bold",'[/*/*]','[/*/*]',body,session)
+	addMarkupObjectFromType("strikethrough",'[/~]','[/~]',body,session)
+	addMarkupObjectFromType("quote",'[/>]','[\n]',body,session)
 
-def addItalics(body,session):
-	pass
+# helper for the add(markup type) functions
+# given a markup symbol (*),(**),(~), etc
+# return a list of dicts:
+# 	text: the text inside the markup 	(str)
+# 	start: the start position 			(int)
+# 	end: the end position				(int)
+def addMarkupObjectFromType(type, opensym, closesym, body, session):
+	marks = re.findall(opensym+'[^/*]*'+closesym,body)
+	print(marks)
+	# todo:
+	# get start and end point of each mark
+	# create a Basic_Markup object for each
+	# add to server
 
-def addBolds(body,session):
-	pass
+# def addItalics(body,session):
+# 	type_name = 'italic'
+# 	dicts = findMarkupFromSymbol('*',body)
+	
+# def addBolds(body,session):
+# 	type_name = 'bold'
+# 	pass
 
-def addStrikethroughs(body,session):
-	pass
+# def addStrikethroughs(body,session):
+# 	type_name = 'strikethrough'
+# 	pass
 
-def addQuotes(body,session):
-	pass
+# def addQuotes(body,session):
+# 	type_name = 'quote'
+# 	pass
+
 
 
 ###################################
@@ -200,7 +223,7 @@ def main():
 	session = createSession(eng)
 
 	# uncomment to show all fields + types
-	[print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
+	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
 
 	# show fields with actual example values
 	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
@@ -210,7 +233,9 @@ def main():
 
 	# now ready to start inserting to database
 	for jobj in jobjs:
-		createTableObjects(jobj,session)
+		if jobj['line_no'] == 21:
+			addMarkupObjects(jobj, session)
+		# createTableObjects(jobj,session)
 	
 
 if __name__ == "__main__":
