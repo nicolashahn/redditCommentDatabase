@@ -8,6 +8,7 @@
 import json
 import sqlalchemy as s
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.dialects import mysql
 import sys
 import re
@@ -16,9 +17,6 @@ import re
 ###################################
 # Global variables
 ###################################
-
-# create base table class
-Base = declarative_base()
 
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
@@ -45,6 +43,20 @@ def jsonDataToDict(data):
 # MySQL general helper functions
 ###################################
 
+# incrementer class for id fields
+# each table class gets one
+class Incrementer():
+	def __init__(self):
+		# so that inc() returns 0 the first time
+		self.i = -1
+
+	def inc(self):
+		self.i += 1
+		return self.i
+
+	def reset(self):
+		self.i = -1
+
 # open connection to database
 # then return engine object
 def connect(username, password, database):
@@ -60,18 +72,23 @@ def createSession(eng):
 	session = Session()
 	return session
 
-# auto-incrementer class for id fields
-# each table class gets one
-class AutoInc():
-	def __init__(self):
-		self.i = 0
+# creates a table class, autoincrementer for each table in the database
+def generateTableClasses(eng):
+	ABase = automap_base()
+	ABase.prepare(eng, reflect=True)
 
-	def inc(self):
-		self.i += 1
-		return self.i
+	global Author, Basic_Markup, Post
+	global author_inc, basic_markup_inc, post_inc
 
-	def reset(self):
-		self.i = 0
+	author_inc = Incrementer()
+	basic_markup_inc = Incrementer()
+	post_inc = Incrementer()
+
+	Author = ABase.classes.authors
+	Basic_Markup = ABase.classes.basic_markup
+	Post = ABase.classes.posts
+
+
 
 ####################################
 # Table Classes
@@ -100,27 +117,43 @@ class AutoInc():
 # subreddit_id <class 'str'>
 # ups <class 'int'>
 
+# FULLNAME PREFIXES
+# t1 = comment
+# t2 = account
+# t3 = link
+# t4 = message
+# t5 = subreddit
+# t6 = award
+# t8 = promocampaign
 
-class Author(Base):
-	__tablename__ = 'authors'
-	authorInc = AutoInc()
 
-	dataset_id = s.Column(mysql.TINYINT(), primary_key=True)
-	author_id = s.Column(mysql.INTEGER(), primary_key=True, default=authorInc.inc())
-	# example schema has username as 255 chars - seems like too many
-	username = s.Column(mysql.VARCHAR(30))
+# class Author(Base):
+# 	__tablename__ = 'authors'
+# 	authorInc = AutoInc()
 
-class Basic_Markup(Base):
-	__tablename__ = 'basic_markup'
-	markupInc = AutoInc()
+# 	dataset_id = s.Column(mysql.TINYINT(unsigned=True), primary_key=True)
+# 	author_id = s.Column(mysql.INTEGER(unsigned=True), primary_key=True, default=authorInc.inc())
+# 	username = s.Column(mysql.VARCHAR(255))
 
-	dataset_id = s.Column(mysql.TINYINT(), primary_key=True)
-	text_id = s.Column(mysql.INTEGER())
-	markup_id = s.Column(mysql.INTEGER(), primary_key=True, default=markupInc.inc())
-	start = s.Column(mysql.INTEGER())
-	end = s.Column(mysql.INTEGER())
-	type_name = s.Column(mysql.VARCHAR(20))
-	attribute_str = s.Column(mysql.TEXT())
+# class Basic_Markup(Base):
+# 	__tablename__ = 'basic_markup'
+# 	markupInc = AutoInc()
+
+# 	dataset_id = s.Column(mysql.TINYINT(unsigned=True), primary_key=True)
+# 	text_id = s.Column(mysql.INTEGER(unsigned=True))
+# 	markup_id = s.Column(mysql.INTEGER(unsigned=True), primary_key=True, default=markupInc.inc())
+# 	start = s.Column(mysql.INTEGER(unsigned=True))
+# 	end = s.Column(mysql.INTEGER(unsigned=True))
+# 	type_name = s.Column(mysql.VARCHAR(20))
+# 	attribute_str = s.Column(mysql.TEXT())
+# 	markup_group_id = s.Column(mysql.INTEGER(unsigned=True))
+
+# class Datasets(Base):
+# 	__tablename__ = 'datasets'
+
+# 	dataset_id = s.Column(mysql.TINYINT(unsigned=True), primary_key=True)
+
+
 
 
 
@@ -133,18 +166,24 @@ class Basic_Markup(Base):
 # load each json field data into the proper table object
 # add to session, push to db after all are added
 def createTableObjects(jobj, session):
-	createAuthorTableObject(jobj,session)
-	# finally, commit all table object to database
-	session.commit()
+	addAuthorToSession(jobj,session)
+	# addPostToSession(jobj,session)
 
-def createAuthorTableObject(jobj, session):
+def addAuthorToSession(jobj, session):
 	author = Author(
 		dataset_id = reddit_id, 
 		# sqlalchemy auto-increments primary keys by default
-		# author_id = 
+		author_id  = author_inc.inc(),
 		username   = jobj["author"] 
 		)
 	session.add(author)
+
+def addPostToSession(jobj, session):
+	post = Post(
+		dataset_id = reddit_id,
+
+		)
+
 
 ####################################
 # Markup
@@ -159,10 +198,12 @@ def createAuthorTableObject(jobj, session):
 # add to session
 def addMarkupObjects(jobj, session):
 	body = jobj['body']
+	# italics, bold, strikethrough, quote, header simple enough to have single function
 	addMarkupObjectFromType("italic",'[/*]','[/*]',body,session)
 	addMarkupObjectFromType("bold",'[/*/*]','[/*/*]',body,session)
 	addMarkupObjectFromType("strikethrough",'[/~]','[/~]',body,session)
 	addMarkupObjectFromType("quote",'[/>]','[\n]',body,session)
+	# subscript
 
 # helper for the add(markup type) functions
 # given a markup symbol (*),(**),(~), etc
@@ -222,21 +263,26 @@ def main():
 	metadata = s.MetaData(bind=eng)
 	session = createSession(eng)
 
+	# creates a table class for each table in the database
+	generateTableClasses(eng)
+
 	# uncomment to show all fields + types
 	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
 
 	# show fields with actual example values
-	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
+	[print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
 	# what type is 'distinguished'? it's always null, probably bool
-
-	
 
 	# now ready to start inserting to database
 	for jobj in jobjs:
-		if jobj['line_no'] == 21:
-			addMarkupObjects(jobj, session)
-		# createTableObjects(jobj,session)
+		# if jobj['line_no'] == 21:
+		# 	addMarkupObjects(jobj, session)
+		createTableObjects(jobj,session)
+		# finally, commit all table object to database
+		session.commit()
+
 	
+		
 
 if __name__ == "__main__":
 	main()
