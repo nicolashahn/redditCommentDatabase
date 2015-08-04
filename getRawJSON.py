@@ -177,6 +177,7 @@ def addSubredditToSession(jobj, session):
 		session.add(subreddit)
 	jobj['subreddit_iac_id'] = subreddit_dict[jobj['subreddit_id']]
 
+
 # for our purposes, link and discussion are synonymous
 # 	reddit discussions almost always start with link
 # 	all top-level comments have that link as their parent
@@ -209,8 +210,6 @@ def addAuthorToSession(jobj, session):
 	jobj['author_iac_id'] = author_dict[jobj['author']]
 
 
-
-
 def addPostToSession(jobj, session):
 	# post = Post(
 	# 	dataset_id = reddit_id,
@@ -227,10 +226,16 @@ def addPostToSession(jobj, session):
 # - add to session
 ####################################
 
-# type of markup: regex to grab group
+# bold and italic can both nest inside strikethrough
 markRe = {
-	'italic':	r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
-	'bold':		r''
+	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
+	'bold':				r'(\*{2}[^\*]+\*{2})',
+	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
+	'quote':			r'(&gt;[^\*\n]+\n)',
+	'link':				r'',
+	'header':			r'',
+	'list':				r'',
+	'superscript':		r'',
 }
 
 
@@ -241,7 +246,10 @@ def addMarkupsToSession(jobj, session):
 	print(jobj['name'])
 	body = jobj['body']
 	allMarkups = []
-	allMarkups += addMarkupObjectFromType("italic",markRe['italic'],body,session)
+	# allMarkups += findMarkupObjectsFromType("italic",markRe['italic'],body)
+	# allMarkups += findMarkupObjectsFromType("bold",markRe['bold'],body)
+	# allMarkups += findMarkupObjectsFromType("strikethrough",markRe['strikethrough'],body)
+	allMarkups += findMarkupObjectsFromType("quote",markRe['quote'],body)
 	for m in allMarkups:
 		print("   ",m.group())
 		print("   ",m.start(), m.end())
@@ -253,7 +261,7 @@ def addMarkupsToSession(jobj, session):
 # 	text: inside the markup (including markup symbols): 	(str)
 # 	start: the start position: 								(int)
 # 	end: the end position:									(int)
-def addMarkupObjectFromType(type, regex, body, session):
+def findMarkupObjectsFromType(type, regex, body):
 	matchObjs = re.finditer(regex,body)
 	return(matchObjs)
 	# todo:
