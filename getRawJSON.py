@@ -3,7 +3,7 @@
 # A script to take raw Reddit JSON data and insert it into a MySQL database
 # input: Raw Reddit JSON post objects in text format, one object per line
 # output: MySQL insertions for each object according to schema
-# note to self: the 1 month dataset has 53,851,542 comments total, plan accordingly
+# the 1 month dataset has 53,851,542 comments total
 
 import json
 import sqlalchemy as s
@@ -20,6 +20,9 @@ import re
 
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
+ 
+link_dict = {}
+subreddit_dict = {}
 
 ###################################
 # JSON data manipulation
@@ -38,6 +41,39 @@ def jsonDataToDict(data):
 		# print([x+": "+str(jline[x]) for x in sorted(jline)])
 	return jobjs
 
+# ALL JSON FIELDS IN AN OBJECT
+# archived <class 'bool'>
+# author <class 'str'>
+# author_flair_css_class <class 'str'>
+# author_flair_text <class 'str'>
+# body <class 'str'>
+# controversiality <class 'int'>
+# created_utc <class 'str'>
+# distinguished <class 'NoneType'>
+# downs <class 'int'>
+# edited <class 'bool'>
+# gilded <class 'int'>
+# id <class 'str'>
+# link_id <class 'str'>
+# name <class 'str'>
+# parent_id <class 'str'>
+# retrieved_on <class 'int'>
+# score <class 'int'>
+# score_hidden <class 'bool'>
+# subreddit <class 'str'>
+# subreddit_id <class 'str'>
+# ups <class 'int'>
+
+# FULLNAME PREFIXES
+# used in fields: link_id, name, parent_id, subreddit_id
+# t1 = comment
+# t2 = account
+# t3 = link
+# t4 = message
+# t5 = subreddit
+# t6 = award
+# t8 = promocampaign
+
 
 ###################################
 # MySQL general helper functions
@@ -47,8 +83,8 @@ def jsonDataToDict(data):
 # each table class gets one
 class Incrementer():
 	def __init__(self):
-		# so that inc() returns 0 the first time
-		self.i = -1
+		# 0 so that inc() returns 1 the first time
+		self.i = 0
 
 	def inc(self):
 		self.i += 1
@@ -77,84 +113,20 @@ def generateTableClasses(eng):
 	ABase = automap_base()
 	ABase.prepare(eng, reflect=True)
 
-	global Author, Basic_Markup, Post
-	global author_inc, basic_markup_inc, post_inc
+	global Author, Basic_Markup, Post, Discussion, Subreddit
+	global author_inc, basic_markup_inc, post_inc, discussion_inc, subreddit_inc
 
 	author_inc = Incrementer()
 	basic_markup_inc = Incrementer()
 	post_inc = Incrementer()
+	discussion_inc = Incrementer()
+	subreddit_inc = Incrementer()
 
 	Author = ABase.classes.authors
 	Basic_Markup = ABase.classes.basic_markup
 	Post = ABase.classes.posts
-
-
-
-####################################
-# Table Classes
-####################################
-
-# ALL JSON FIELDS IN AN OBJECT
-# archived <class 'bool'>
-# author <class 'str'>
-# author_flair_css_class <class 'str'>
-# author_flair_text <class 'str'>
-# body <class 'str'>
-# controversiality <class 'int'>
-# created_utc <class 'str'>
-# distinguished <class 'NoneType'>
-# downs <class 'int'>
-# edited <class 'bool'>
-# gilded <class 'int'>
-# id <class 'str'>
-# link_id <class 'str'>
-# name <class 'str'>
-# parent_id <class 'str'>
-# retrieved_on <class 'int'>
-# score <class 'int'>
-# score_hidden <class 'bool'>
-# subreddit <class 'str'>
-# subreddit_id <class 'str'>
-# ups <class 'int'>
-
-# FULLNAME PREFIXES
-# t1 = comment
-# t2 = account
-# t3 = link
-# t4 = message
-# t5 = subreddit
-# t6 = award
-# t8 = promocampaign
-
-
-# class Author(Base):
-# 	__tablename__ = 'authors'
-# 	authorInc = AutoInc()
-
-# 	dataset_id = s.Column(mysql.TINYINT(unsigned=True), primary_key=True)
-# 	author_id = s.Column(mysql.INTEGER(unsigned=True), primary_key=True, default=authorInc.inc())
-# 	username = s.Column(mysql.VARCHAR(255))
-
-# class Basic_Markup(Base):
-# 	__tablename__ = 'basic_markup'
-# 	markupInc = AutoInc()
-
-# 	dataset_id = s.Column(mysql.TINYINT(unsigned=True), primary_key=True)
-# 	text_id = s.Column(mysql.INTEGER(unsigned=True))
-# 	markup_id = s.Column(mysql.INTEGER(unsigned=True), primary_key=True, default=markupInc.inc())
-# 	start = s.Column(mysql.INTEGER(unsigned=True))
-# 	end = s.Column(mysql.INTEGER(unsigned=True))
-# 	type_name = s.Column(mysql.VARCHAR(20))
-# 	attribute_str = s.Column(mysql.TEXT())
-# 	markup_group_id = s.Column(mysql.INTEGER(unsigned=True))
-
-# class Datasets(Base):
-# 	__tablename__ = 'datasets'
-
-# 	dataset_id = s.Column(mysql.TINYINT(unsigned=True), primary_key=True)
-
-
-
+	Discussion = ABase.classes.discussions
+	Subreddit = ABase.classes.subreddits
 
 
 ####################################
@@ -162,12 +134,36 @@ def generateTableClasses(eng):
 # - operates on a single post object
 ####################################
 
+
 # take a single json dictionary object
 # load each json field data into the proper table object
-# add to session, push to db after all are added
+# pushed to server in main function
 def createTableObjects(jobj, session):
-	addAuthorToSession(jobj,session)
+
+	# addDiscussionToSession(jobj,session)
+	addSubredditToSession(jobj,session)
+	# addAuthorToSession(jobj,session)
+	# addMarkupsToSession(jobj,session)
+	# addTextToSession(jobj,session)
 	# addPostToSession(jobj,session)
+
+# check the dict to see if the subreddit is in the db already
+# if not, insert a new subreddit to the session
+# if so, simply add an object to jobj: 'subreddit_iac_id'
+# use this when inserting the post object
+def addSubredditToSession(jobj, session):
+	if jobj['subreddit_id'] not in subreddit_dict:
+		# example: {'t5_0d032da': 43}
+		subreddit_dict[jobj['subreddit_id']] = subreddit_inc
+		subreddit = Subreddit(
+			dataset_id 			= reddit_id,
+			subreddit_id 		= subreddit_inc.inc(),
+			subreddit_name 		= jobj['subreddit'],
+			subreddit_native_id = jobj['subreddit_id']
+			)
+		session.add(subreddit)
+	else:
+		jobj['subreddit_iac_id'] = subreddit_dict[jobj['subreddit_id']]
 
 def addAuthorToSession(jobj, session):
 	author = Author(
@@ -178,11 +174,13 @@ def addAuthorToSession(jobj, session):
 		)
 	session.add(author)
 
-def addPostToSession(jobj, session):
-	post = Post(
-		dataset_id = reddit_id,
 
-		)
+def addPostToSession(jobj, session):
+	# post = Post(
+	# 	dataset_id = reddit_id,
+	# 	discussion_id = 
+	# 	)
+	pass
 
 
 ####################################
@@ -219,21 +217,6 @@ def addMarkupObjectFromType(type, opensym, closesym, body, session):
 	# create a Basic_Markup object for each
 	# add to server
 
-# def addItalics(body,session):
-# 	type_name = 'italic'
-# 	dicts = findMarkupFromSymbol('*',body)
-	
-# def addBolds(body,session):
-# 	type_name = 'bold'
-# 	pass
-
-# def addStrikethroughs(body,session):
-# 	type_name = 'strikethrough'
-# 	pass
-
-# def addQuotes(body,session):
-# 	type_name = 'quote'
-# 	pass
 
 
 
@@ -263,7 +246,7 @@ def main():
 	metadata = s.MetaData(bind=eng)
 	session = createSession(eng)
 
-	# creates a table class for each table in the database
+	# creates a table class and autoincrementer for each table in the database
 	generateTableClasses(eng)
 
 	# uncomment to show all fields + types
