@@ -20,9 +20,13 @@ import re
 
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
- 
+
+# {native_id: db_id}
+# so we don't have to query to check if link/subreddit obj already exists
 link_dict = {}
 subreddit_dict = {}
+author_dict = {}
+
 
 ###################################
 # JSON data manipulation
@@ -63,6 +67,11 @@ def jsonDataToDict(data):
 # subreddit <class 'str'>
 # subreddit_id <class 'str'>
 # ups <class 'int'>
+# note: distinguished can be
+# 			null 		= not distinguished, regular user
+# 			moderator 	= moderator (green M)
+# 			admin 		= admin (red A)
+# 			special 	= special distinguishes
 
 # FULLNAME PREFIXES
 # used in fields: link_id, name, parent_id, subreddit_id
@@ -140,12 +149,13 @@ def generateTableClasses(eng):
 # pushed to server in main function
 def createTableObjects(jobj, session):
 
-	# addDiscussionToSession(jobj,session)
 	addSubredditToSession(jobj,session)
-	# addAuthorToSession(jobj,session)
+	addDiscussionToSession(jobj,session)
+	addAuthorToSession(jobj,session)
 	# addMarkupsToSession(jobj,session)
 	# addTextToSession(jobj,session)
 	# addPostToSession(jobj,session)
+
 
 # check the dict to see if the subreddit is in the db already
 # if not, insert a new subreddit to the session
@@ -154,25 +164,46 @@ def createTableObjects(jobj, session):
 def addSubredditToSession(jobj, session):
 	if jobj['subreddit_id'] not in subreddit_dict:
 		# example: {'t5_0d032da': 43}
-		subreddit_dict[jobj['subreddit_id']] = subreddit_inc
+		subreddit_dict[jobj['subreddit_id']] = subreddit_inc.inc()
 		subreddit = Subreddit(
 			dataset_id 			= reddit_id,
-			subreddit_id 		= subreddit_inc.inc(),
+			subreddit_id 		= subreddit_dict[jobj['subreddit_id']],
 			subreddit_name 		= jobj['subreddit'],
 			subreddit_native_id = jobj['subreddit_id']
 			)
 		session.add(subreddit)
-	else:
-		jobj['subreddit_iac_id'] = subreddit_dict[jobj['subreddit_id']]
+	jobj['subreddit_iac_id'] = subreddit_dict[jobj['subreddit_id']]
+
+# for our purposes, link and discussion are synonymous
+# 	reddit discussions almost always start with link
+# 	all top-level comments have that link as their parent
+# can't get link title or url without reddit API calls
+# so just insert the native id for now
+# works basically the same as subreddit
+# todo: create a script to run after all insertions to fill in url, title
+def addDiscussionToSession(jobj, session):
+	if jobj['link_id'] not in link_dict:
+		link_dict[jobj['link_id']] = discussion_inc.inc()
+		discussion = Discussion(
+			dataset_id 			= reddit_id,
+			discussion_id 		= link_dict[jobj['link_id']],
+			native_discussion_id= jobj['link_id'],
+			subreddit_id 		= subreddit_dict[jobj['subreddit_id']]
+			)
+		session.add(discussion)
+	jobj['discussion_iac_id'] = link_dict[jobj['link_id']]
+
 
 def addAuthorToSession(jobj, session):
-	author = Author(
-		dataset_id = reddit_id, 
-		# sqlalchemy auto-increments primary keys by default
-		author_id  = author_inc.inc(),
-		username   = jobj["author"] 
-		)
-	session.add(author)
+	if jobj['author'] not in author_dict:
+		author_dict[jobj['author']] = author_inc.inc()
+		author = Author(
+			dataset_id = reddit_id, 
+			author_id  = author_dict[jobj['author']],
+			username   = jobj["author"] 
+			)
+		session.add(author)
+	jobj['author_iac_id'] = author_dict[jobj['author']]
 
 
 def addPostToSession(jobj, session):
@@ -221,7 +252,7 @@ def addMarkupObjectFromType(type, opensym, closesym, body, session):
 
 
 ###################################
-# Program starts here
+# Execution starts here
 ###################################
 
 def main():
@@ -253,8 +284,8 @@ def main():
 	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
 
 	# show fields with actual example values
-	[print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
-	# what type is 'distinguished'? it's always null, probably bool
+	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
+
 
 	# now ready to start inserting to database
 	for jobj in jobjs:
