@@ -45,7 +45,9 @@ def jsonDataToDict(data):
 		# print([x+": "+str(jline[x]) for x in sorted(jline)])
 	return jobjs
 
+
 # ALL JSON FIELDS IN AN OBJECT
+
 # archived <class 'bool'>
 # author <class 'str'>
 # author_flair_css_class <class 'str'>
@@ -146,13 +148,14 @@ def generateTableClasses(eng):
 
 # take a single json dictionary object
 # load each json field data into the proper table object
-# pushed to server in main function
+# add to session
+# pushes to server in main()
 def createTableObjects(jobj, session):
 
-	addSubredditToSession(jobj,session)
-	addDiscussionToSession(jobj,session)
-	addAuthorToSession(jobj,session)
-	# addMarkupsToSession(jobj,session)
+	# addSubredditToSession(jobj,session)
+	# addDiscussionToSession(jobj,session)
+	# addAuthorToSession(jobj,session)
+	addMarkupsToSession(jobj,session)
 	# addTextToSession(jobj,session)
 	# addPostToSession(jobj,session)
 
@@ -206,6 +209,8 @@ def addAuthorToSession(jobj, session):
 	jobj['author_iac_id'] = author_dict[jobj['author']]
 
 
+
+
 def addPostToSession(jobj, session):
 	# post = Post(
 	# 	dataset_id = reddit_id,
@@ -222,27 +227,35 @@ def addPostToSession(jobj, session):
 # - add to session
 ####################################
 
+# type of markup: regex to grab group
+markRe = {
+	'italic':	r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
+	'bold':		r''
+}
+
+
 # create a markup table object
 # for each slice of marked up text in the 'body' field
 # add to session
-def addMarkupObjects(jobj, session):
+def addMarkupsToSession(jobj, session):
+	print(jobj['name'])
 	body = jobj['body']
-	# italics, bold, strikethrough, quote, header simple enough to have single function
-	addMarkupObjectFromType("italic",'[/*]','[/*]',body,session)
-	addMarkupObjectFromType("bold",'[/*/*]','[/*/*]',body,session)
-	addMarkupObjectFromType("strikethrough",'[/~]','[/~]',body,session)
-	addMarkupObjectFromType("quote",'[/>]','[\n]',body,session)
+	allMarkups = []
+	allMarkups += addMarkupObjectFromType("italic",markRe['italic'],body,session)
+	for m in allMarkups:
+		print("   ",m.group())
+		print("   ",m.start(), m.end())
 	# subscript
 
 # helper for the add(markup type) functions
 # given a markup symbol (*),(**),(~), etc
 # return a list of dicts:
-# 	text: the text inside the markup 	(str)
-# 	start: the start position 			(int)
-# 	end: the end position				(int)
-def addMarkupObjectFromType(type, opensym, closesym, body, session):
-	marks = re.findall(opensym+'[^/*]*'+closesym,body)
-	print(marks)
+# 	text: inside the markup (including markup symbols): 	(str)
+# 	start: the start position: 								(int)
+# 	end: the end position:									(int)
+def addMarkupObjectFromType(type, regex, body, session):
+	matchObjs = re.finditer(regex,body)
+	return(matchObjs)
 	# todo:
 	# get start and end point of each mark
 	# create a Basic_Markup object for each
