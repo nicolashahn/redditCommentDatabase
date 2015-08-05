@@ -12,6 +12,7 @@ from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.dialects import mysql
 import sys
 import re
+import markdown2 as md
 
 
 ###################################
@@ -155,7 +156,7 @@ def createTableObjects(jobj, session):
 	# addSubredditToSession(jobj,session)
 	# addDiscussionToSession(jobj,session)
 	# addAuthorToSession(jobj,session)
-	addMarkupsToSession(jobj,session)
+	addAllMarkupsToSession(jobj,session)
 	# addTextToSession(jobj,session)
 	# addPostToSession(jobj,session)
 
@@ -219,7 +220,8 @@ def addPostToSession(jobj, session):
 
 
 ####################################
-# Markup
+# 	Markup
+# 
 # - get each instance of markup
 # 	- each time a bit of text is italic/bold/strikethough/etc
 # - turn into a basic_markup table object
@@ -227,13 +229,15 @@ def addPostToSession(jobj, session):
 ####################################
 
 # bold and italic can both nest inside strikethrough
+# superscript can be nested inside links
 markRe = {
 	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
 	'bold':				r'(\*{2}[^\*]+\*{2})',
 	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
 	'quote':			r'(&gt;[^\*\n]+\n)',
-	'link':				r'',
-	'header':			r'',
+	# links are tricky, keeps grabbing spaces as well - not finished
+	'link':				r'(\[.*\]\([^\)\s]+\))',
+	'header':			r'(\#+.*)',
 	'list':				r'',
 	'superscript':		r'',
 }
@@ -242,18 +246,25 @@ markRe = {
 # create a markup table object
 # for each slice of marked up text in the 'body' field
 # add to session
-def addMarkupsToSession(jobj, session):
+def addAllMarkupsToSession(jobj, session):
 	print(jobj['name'])
 	body = jobj['body']
+	body = md.markdown(body)[3:-5]
+	print(body)
 	allMarkups = []
-	# allMarkups += findMarkupObjectsFromType("italic",markRe['italic'],body)
-	# allMarkups += findMarkupObjectsFromType("bold",markRe['bold'],body)
-	# allMarkups += findMarkupObjectsFromType("strikethrough",markRe['strikethrough'],body)
-	allMarkups += findMarkupObjectsFromType("quote",markRe['quote'],body)
+	mIndex = 0
+	allMarkups += findMarkupObjectsFromType("italic",markRe['italic'],body, mIndex)
+	allMarkups += findMarkupObjectsFromType("bold",markRe['bold'],body, mIndex)
+	# allMarkups += findMarkupObjectsFromType("strikethrough",markRe['strikethrough'],body, mIndex)
+	# allMarkups += findMarkupObjectsFromType("quote",markRe['quote'],body, mIndex)
+	# allMarkups += findMarkupObjectsFromType("link",markRe['link'],body, mIndex)
+	allMarkups = markNestedMarkups(allMarkups)
+	allMarkups = sorted(allMarkups, key=lambda k: k['start'])
 	for m in allMarkups:
-		print("   ",m.group())
-		print("   ",m.start(), m.end())
-	# subscript
+		print("   ",m['type'])
+		print("   ",m['start'],m['end'])
+		print("   ",m['text'])
+	allMarkups, body = removeMarkupAndFixIndices(allMarkups, body)
 
 # helper for the add(markup type) functions
 # given a markup symbol (*),(**),(~), etc
@@ -261,15 +272,82 @@ def addMarkupsToSession(jobj, session):
 # 	text: inside the markup (including markup symbols): 	(str)
 # 	start: the start position: 								(int)
 # 	end: the end position:									(int)
-def findMarkupObjectsFromType(type, regex, body):
+def findMarkupObjectsFromType(mtype, regex, body, mIndex):
 	matchObjs = re.finditer(regex,body)
-	return(matchObjs)
-	# todo:
-	# get start and end point of each mark
-	# create a Basic_Markup object for each
-	# add to server
+	markupObjs = []
+	for matchObj in matchObjs:
+		mark = {
+			'type':		mtype,
+			'text':		matchObj.group(),
+			'start':	matchObj.start(),
+			'end':		matchObj.end(),
+			'index':	mIndex,
+			# -1 indicates not nested
+			# 0+ gives index of MarkupObject this one is nested inside
+			'nested':	-1,
+		}
+		markupObjs.append(mark)
+	return(markupObjs)
+
+def markNestedMarkups(allMarkups):
+	for mObj in allMarkups:
+		pass
+	return allMarkups
+
+# take list of markupObjects
+# replace each markup char with ♣ (alt+5465) in body text
+# also take out markup from markupObject text
+# fix start, end values to be correct after markup is removed
+# then go back and take out all ♣ from body
+# markupObjects, body text both ready for insertion
+def removeMarkupAndFixIndices(mObjs, body):
+	# counter for how many characters need to be removed from text
+	removed = 0
+	for mObj in mObjs:
+		print(mObj)
+		# offset start, end indices by how much we've already removed
+		mObj['start'] = mObj['start'] - removed
+		mObj['end'] = mObj['end'] - removed
+		
+		if mObj['type'] == 'italic':
+			mObj, removed, body = removeItalic(mObj, removed, body)
+		if mObj['type'] == 'bold':
+			mObj, removed, body = removeBold(mObj, removed, body)
+		if mObj['type'] == 'strikethrough':
+			mObj, removed, body = removeStrikethrough(mObj, removed, body)
+		if mObj['type'] == 'quote':
+			mObj, removed, body = removeQuote(mObj, removed, body)
+		print(mObj)
+		print(body)
+	# now mObjs have correct start/end, body only has ♣ chars, no markup
+	return mObjs, body
 
 
+def removeItalic(mObj, removed, body):
+	removed += 2
+	oldText = mObj['text']
+	# remove first and last chars
+	mObj['text'] = mObj['text'][1:-1]
+	# trying to replace directly without using ♣ 
+	body = body.replace(oldText, mObj['text'])
+	mObj['end'] = mObj['end'] - 2
+	return mObj, removed, body
+
+
+def removeBold(mObj, removed, body):
+	removed += 4
+	oldText = mObj['text']
+	mObj['text'] = mObj['text'][2:-2]
+	body = body.replace(oldText, mObj['text'])
+	mObj['end'] = mObj['end'] - 4
+	return mObj, removed, body
+
+def removeStrikethrough(mObj, removed, body):
+	return mObj, removed, body
+
+# take out all '&gt;', treat as one quote
+def removeQuote(mObj, removed, body):
+	return mObj, removed, body
 
 
 ###################################
