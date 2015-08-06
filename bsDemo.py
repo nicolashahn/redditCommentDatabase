@@ -10,7 +10,26 @@ body = """
 ## header2
 ### header3 #######
 
-*italic ~nested strikethrough~ more italic*
+*italic ~~nested strikethrough~~ more italic*
+
+**bold**
+
+~~lone strikethrough~~
+
+&gt; quote
+
+3. list1
+2. list2
+45. list3
+
+* ullist1
++ ullist2
+- ullist3
+
+^one^two^three
+
+^^^^four
+
 """
 
 def convertAndClean(body):

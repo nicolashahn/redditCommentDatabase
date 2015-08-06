@@ -28,6 +28,9 @@ link_dict = {}
 subreddit_dict = {}
 author_dict = {}
 
+# temporary output file for checking things (print statements die on unicode)
+tempOut = open('tempOut','w', encoding='utf8')
+
 
 ###################################
 # JSON data manipulation
@@ -246,13 +249,45 @@ markRe = {
 	'ulist':			r'([\*\+\-] .*\n)',
 	# ordered list
 	'olist':			r'([0-9]+\. .*\n)',
-	'superscript':		r'(\^\S+\s)',
+	'superscript':		r'(\^[^\s\n\<\>\]\[\)\(]+)(?=[\s\n\<\>\]\[\)\(])',
 }
 
-class MarkObj():
+def addAllMarkupsToSession(jobj, session):
+	body = convertAndClean(jobj['body'])
+	tempOut.write(jobj['name']+'\n')
+	tempOut.write(body+'\n\n')
 
 
+def convertAndClean(body):
+	newbody = body.replace('&gt;','>')
+	newbody = newbody.replace('&amp;','&')
+	newbody = newbody.replace('&lt;','<')
+	newbody = replaceSuperscriptTags(newbody)
+	newbody = md.markdown(newbody)
+	newbody = newbody.replace('<p>','')
+	newbody = newbody.replace('</p>','')
+	newbody = replaceStrikethroughTags(newbody)
+	return newbody
 
+# markdown2 replaces all Reddit markdown except strikethrough, superscript
+# so we do it here manually
+def replaceStrikethroughTags(body):
+	newbody = body
+	matchObjs = re.finditer(markRe['strikethrough'],body)
+	for obj in matchObjs:
+		newObjText = '<strike>' + obj.group()[2:-2] + '</strike>'
+		newbody = newbody.replace(obj.group(), newObjText)
+	return newbody
+
+def replaceSuperscriptTags(body):
+	newbody = body
+	matchObjs = re.finditer(markRe['superscript'],body)
+	for obj in matchObjs:
+		newObjText = '<sup>' + obj.group()[1:] + '</sup>'
+		newbody = newbody.replace(obj.group(),newObjText)
+	return newbody
+
+"""
 # create a markup table object
 # for each slice of marked up text in the 'body' field
 # add to session
@@ -368,7 +403,7 @@ def removeStrikethrough(mObj, removed, body):
 # take out all '&gt;', treat as one quote
 def removeQuote(mObj, removed, body):
 	return mObj, removed, body
-
+"""
 
 ###################################
 # Execution starts here
@@ -404,7 +439,6 @@ def main():
 
 	# show fields with actual example values
 	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
-
 
 	# now ready to start inserting to database
 	for jobj in jobjs:
