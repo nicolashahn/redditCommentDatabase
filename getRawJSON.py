@@ -228,6 +228,10 @@ def addPostToSession(jobj, session):
 # - add to session
 ####################################
 
+# note to self
+# DON'T STORE TEXT FOR EACH MARKUPOBJ UNTIL ALL MARKUP REMOVED FROM BODY
+# just move around start, end indices and remove body markup incrementally
+
 # bold and italic can both nest inside strikethrough
 # superscript can be nested inside links
 markRe = {
@@ -237,10 +241,16 @@ markRe = {
 	'quote':			r'(&gt;[^\*\n]+\n)',
 	# links are tricky, keeps grabbing spaces as well - not finished
 	'link':				r'(\[.*\]\([^\)\s]+\))',
-	'header':			r'(\#+.*)',
-	'list':				r'',
-	'superscript':		r'',
+	'header':			r'(\#+.+\s)',
+	# unordered list
+	'ulist':			r'([\*\+\-] .*\n)',
+	# ordered list
+	'olist':			r'([0-9]+\. .*\n)',
+	'superscript':		r'(\^\S+\s)',
 }
+
+class MarkObj():
+
 
 
 # create a markup table object
@@ -248,9 +258,9 @@ markRe = {
 # add to session
 def addAllMarkupsToSession(jobj, session):
 	print(jobj['name'])
+	# body = convertAndClean(jobj['body'])
+	# print(body)
 	body = jobj['body']
-	body = md.markdown(body)[3:-5]
-	print(body)
 	allMarkups = []
 	mIndex = 0
 	allMarkups += findMarkupObjectsFromType("italic",markRe['italic'],body, mIndex)
@@ -265,6 +275,14 @@ def addAllMarkupsToSession(jobj, session):
 		print("   ",m['start'],m['end'])
 		print("   ",m['text'])
 	allMarkups, body = removeMarkupAndFixIndices(allMarkups, body)
+
+# use markdown2 to convert to html tags
+def convertAndClean(body):
+	body = body.replace('&gt;','>')
+	body = md.markdown(body)
+	body = body.replace('<p>','')
+	body = body.replace('</p>','')
+	return body
 
 # helper for the add(markup type) functions
 # given a markup symbol (*),(**),(~), etc
@@ -285,6 +303,8 @@ def findMarkupObjectsFromType(mtype, regex, body, mIndex):
 			# -1 indicates not nested
 			# 0+ gives index of MarkupObject this one is nested inside
 			'nested':	-1,
+			# only int used if type = list
+			'listindex':None,
 		}
 		markupObjs.append(mark)
 	return(markupObjs)
@@ -368,7 +388,7 @@ def main():
 	db = sys.argv[4]
 	
 	# raw text -> json dicts
-	data = open(data,'r',)
+	data = open(data,'r')
 	jobjs = jsonDataToDict(data)
 
 	# connect to server, bind metadata, create session
