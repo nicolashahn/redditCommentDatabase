@@ -13,6 +13,7 @@ from sqlalchemy.dialects import mysql
 import sys
 import re
 import markdown2 as md
+import bs4
 
 
 ###################################
@@ -28,7 +29,8 @@ link_dict = {}
 subreddit_dict = {}
 author_dict = {}
 
-# temporary output file for checking things (print statements die on unicode)
+# temporary output file for checking things 
+# (print statements choke on unicode)
 tempOut = open('tempOut','w', encoding='utf8')
 
 
@@ -235,9 +237,9 @@ def addPostToSession(jobj, session):
 # DON'T STORE TEXT FOR EACH MARKUPOBJ UNTIL ALL MARKUP REMOVED FROM BODY
 # just move around start, end indices and remove body markup incrementally
 
-# bold and italic can both nest inside strikethrough
-# superscript can be nested inside links
+# regex grabs markdown groups for each type
 markRe = {
+	# need to add \n lookbehind to most of these
 	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
 	'bold':				r'(\*{2}[^\*]+\*{2})',
 	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
@@ -252,12 +254,53 @@ markRe = {
 	'superscript':		r'(\^[^\s\n\<\>\]\[\)\(]+)(?=[\s\n\<\>\]\[\)\(])',
 }
 
+# same as above but for html tags instead
+tagRe = {
+	'em':				r'(\<em\>[\s\S]+?\<\/em\>)',
+	'strong':			r'(\<strong\>[\s\S]+?\<\/strong\>)',
+	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
+	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
+	'link':				r'(?i)(<a[^>]+>.+?</a>)',
+	'h1':				r'(\<h1\>[\s\S]+?\<\/h1\>)',
+	'h2':				r'(\<h2\>[\s\S]+?\<\/h2\>)',
+	'h3':				r'(\<h3\>[\s\S]+?\<\/h3\>)',
+	'h4':				r'(\<h4\>[\s\S]+?\<\/h4\>)',
+	'h5':				r'(\<h5\>[\s\S]+?\<\/h5\>)',
+	'h6':				r'(\<h6\>[\s\S]+?\<\/h6\>)',
+	'ul':				r'(\<ul\>[\s\S]+?\<\/ul\>)',
+	'ol':				r'(\<ol\>[\s\S]+?\<\/ol\>)',
+	'li':				r'(\<li\>[\s\S]+?\<\/li\>)',
+	'sup':				r'(\<sup\>[\s\S]+?\<\/sup\>)',
+}
+
+# the char size of each opening tag
+# the closing tags size = opening + 1
+# except for link, which is variable: 
+# <a href="https://google.com">google</a>
+tagSize = {
+	'em':				2,
+	'strong':			6,
+	'strike': 			6,
+	'blockquote':		10,
+	'link':				1,
+	# headers the same
+	'h1':				2,
+	# list objs the same				
+	'li':				2,
+	'sup':				3,
+}
+
 def addAllMarkupsToSession(jobj, session):
 	body = convertAndClean(jobj['body'])
 	tempOut.write(jobj['name']+'\n')
-	tempOut.write(body+'\n\n')
+	tempOut.write("___OLD___:\n"+body+'\n\n')
+	tObjs = getAllTagObjects(body)
+	tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
+	fixedTObjs, fixedbody = stripAllTagsAndFixStartEnd(tObjs, body)
+	tempOut.write("___NEW___:\n"+fixedbody+'\n\n')
+	tempOut.write("tObjs:\n"+str(fixedTObjs)+"\n\n\n\n")
 
-
+# markdown -> html tags
 def convertAndClean(body):
 	newbody = body.replace('&gt;','>')
 	newbody = newbody.replace('&amp;','&')
@@ -270,7 +313,7 @@ def convertAndClean(body):
 	return newbody
 
 # markdown2 replaces all Reddit markdown except strikethrough, superscript
-# so we do it here manually
+# so do it here manually
 def replaceStrikethroughTags(body):
 	newbody = body
 	matchObjs = re.finditer(markRe['strikethrough'],body)
@@ -286,6 +329,75 @@ def replaceSuperscriptTags(body):
 		newObjText = '<sup>' + obj.group()[1:] + '</sup>'
 		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
+
+# in: body text (after replacing markup with tags)
+# out: list of dicts (tag objects)
+def getAllTagObjects(body):
+	tObjs = []
+	for tag in tagRe:
+		matches = re.finditer(tagRe[tag], body)
+		for m in matches:
+			tObjs.append(matchToTagObject(m, tag))
+	return tObjs
+
+def matchToTagObject(match, tag):
+	tObj = {
+		'type': 	tag,
+		'start':	match.start(),
+		'end':		match.end(),
+		# don't store text yet - remove nested tags from body
+	}
+	return tObj
+
+def stripAllTagsAndFixStartEnd(tObjs, body):
+	newbody = body
+	# how many characters we've already removed
+	r = 0
+	fixed = []
+	tObjs = sorted(tObjs, key=lambda k: k['start'])
+	for i in range(len(tObjs)):
+		tObj = tObjs.pop(0)
+		oldEnd = tObj['end']
+		tObj['start'] -= r
+		tObj['end'] -= r
+		print(tObj['start'], r)
+		if tObj['type'] != 'link':
+			# removeO, C = how many characters the opening, closing tags take
+			newbody, removeO, removeC = stripTag(tObj, newbody)
+			# <type>text</type>
+			# type appears twice, <></> = 5 extra chars
+			tObj['end'] -= removeO+removeC
+			r += removeO
+			# deal with nested tags:
+			# if some tag in fixed envelopes this tObj
+			# subtract how much we just removed from its end position
+			for f in fixed:
+				if f['end'] > tObj['end']:
+					f['end'] -= removeO+removeC
+			# if there are no nested tags within tObj
+			# add the closing tag amount to r
+			noNest = True
+			for t in tObjs:
+				if t['start'] < tObj['end']:
+					noNest = False
+					break
+			if noNest:
+				r += removeC
+		fixed.append(tObj)
+	return fixed, newbody
+
+def stripTag(tObj, body):
+	newbody = body
+	s = tObj['start']
+	e = tObj['end']
+	# size of open tag, close tag
+	o = len(tObj['type'])+2
+	c = len(tObj['type'])+3
+	# remove end tag first because indices count from start of string
+	newbody = newbody[0:e-c] + newbody[e:]
+	newbody = newbody[0:s] + newbody[s+o:]
+	return newbody, o, c
+
 
 """
 # create a markup table object
@@ -434,7 +546,7 @@ def main():
 	# creates a table class and autoincrementer for each table in the database
 	generateTableClasses(eng)
 
-	# uncomment to show all fields + types
+	# show all fields + types
 	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
 
 	# show fields with actual example values
