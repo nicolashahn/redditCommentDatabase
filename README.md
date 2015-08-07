@@ -1,6 +1,9 @@
 # redditCommentDatabase
-Raw JSON -> MySQL database using Python+sqlalchemy
-
+Raw JSON -> MySQL database using Python + sqlalchemy + markdown2 libraries
+'''
+pip install sqlalchemy
+pip install markdown2
+'''
 Given MySQL login information and raw JSON Reddit comments:
 - Organizes comments according to the Internet Arguments Corpus schema, storing table information for
   + Subreddit (seperate from Topic)
