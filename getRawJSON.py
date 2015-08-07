@@ -1,6 +1,7 @@
 # NLDS Lab
 # Nicolas Hahn
-# A script to take raw Reddit JSON data and insert it into a MySQL database
+# A script to take raw Reddit JSON data 
+# and insert it to a MySQL DB based on IAC schema
 # input: Raw Reddit JSON post objects in text format, one object per line
 # output: MySQL insertions for each object according to schema
 # the 1 month dataset has 53,851,542 comments total
@@ -28,6 +29,7 @@ reddit_id = 6
 link_dict = {}
 subreddit_dict = {}
 author_dict = {}
+post_dict = {}
 
 # temporary output file for checking things 
 # (print statements choke on unicode)
@@ -130,20 +132,22 @@ def generateTableClasses(eng):
 	ABase = automap_base()
 	ABase.prepare(eng, reflect=True)
 
-	global Author, Basic_Markup, Post, Discussion, Subreddit
-	global author_inc, basic_markup_inc, post_inc, discussion_inc, subreddit_inc
+	global Author, Basic_Markup, Post, Discussion, Subreddit, Text
+	global author_inc, basic_markup_inc, post_inc, discussion_inc, subreddit_inc, text_inc
 
 	author_inc = Incrementer()
 	basic_markup_inc = Incrementer()
 	post_inc = Incrementer()
 	discussion_inc = Incrementer()
 	subreddit_inc = Incrementer()
+	text_inc = Incrementer()
 
 	Author = ABase.classes.authors
 	Basic_Markup = ABase.classes.basic_markup
 	Post = ABase.classes.posts
 	Discussion = ABase.classes.discussions
 	Subreddit = ABase.classes.subreddits
+	Text = ABase.classes.texts
 
 
 ####################################
@@ -161,8 +165,7 @@ def createTableObjects(jobj, session):
 	# addSubredditToSession(jobj,session)
 	# addDiscussionToSession(jobj,session)
 	# addAuthorToSession(jobj,session)
-	addAllMarkupsToSession(jobj,session)
-	# addTextToSession(jobj,session)
+	addMarkupsAndTextToSession(jobj,session)
 	# addPostToSession(jobj,session)
 
 
@@ -216,13 +219,27 @@ def addAuthorToSession(jobj, session):
 	jobj['author_iac_id'] = author_dict[jobj['author']]
 
 
-def addPostToSession(jobj, session):
-	# post = Post(
-	# 	dataset_id = reddit_id,
-	# 	discussion_id = 
-	# 	)
-	pass
+def addTextObjectToSession(jobj, session):
+	text_id = text_inc.inc()
+	text = Text(
+		dataset_id 	= reddit_id,
+		text_id 	= text_id,
+		text 		= jobj['newBody'].encode(encoding='utf8')
+		)
+	session.add(text)
+	return text_id
 
+
+def addPostToSession(jobj, session):
+	post = Post(
+		dataset_id 		= reddit_id,
+		discussion_id 	= jobj['discussion_iac_id'],
+		post_id 		= post_inc.inc(),
+		author_id 		= jobj['author_iac_id'],
+		# timestamp		= 
+
+		)
+	
 
 ####################################
 # 	Markup
@@ -233,9 +250,6 @@ def addPostToSession(jobj, session):
 # - add to session
 ####################################
 
-# note to self
-# DON'T STORE TEXT FOR EACH MARKUPOBJ UNTIL ALL MARKUP REMOVED FROM BODY
-# just move around start, end indices and remove body markup incrementally
 
 # regex grabs markdown groups for each type
 markRe = {
@@ -260,7 +274,7 @@ tagRe = {
 	'strong':			r'(\<strong\>[\s\S]+?\<\/strong\>)',
 	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
 	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
-	'link':				r'(?i)(<a[^>]+>.+?</a>)',
+	'link':				r'(?i)(<a[^>]+?>.+?</a>)',
 	'h1':				r'(\<h1\>[\s\S]+?\<\/h1\>)',
 	'h2':				r'(\<h2\>[\s\S]+?\<\/h2\>)',
 	'h3':				r'(\<h3\>[\s\S]+?\<\/h3\>)',
@@ -273,32 +287,44 @@ tagRe = {
 	'sup':				r'(\<sup\>[\s\S]+?\<\/sup\>)',
 }
 
-# the char size of each opening tag
-# the closing tags size = opening + 1
-# except for link, which is variable: 
-# <a href="https://google.com">google</a>
-tagSize = {
-	'em':				2,
-	'strong':			6,
-	'strike': 			6,
-	'blockquote':		10,
-	'link':				1,
-	# headers the same
-	'h1':				2,
-	# list objs the same				
-	'li':				2,
-	'sup':				3,
+# html tag names -> MySQL type names
+tagToType = {
+	'em':				'italic',
+	'strong':			'bold',
+	'strike': 			'strikethrough',
+	'blockquote':		'quote',
+	'link':				'link',
+	'h1':				'header1',
+	'h2':				'header2',
+	'h3':				'header3',
+	'h4':				'header4',
+	'h5':				'header5',
+	'h6':				'header6',
+	'ul':				'unorderList',
+	'ol':				'orderedList',
+	'li':				'listItem',
+	'sup':				'superscript'
 }
 
-def addAllMarkupsToSession(jobj, session):
+# convert markdown body to html tags
+# then get each tag object
+# remove tags and make sure indices of each tag object are correct
+# add the inner text to the tag object
+# push both the tag objects, cleaned up body text to session
+def addMarkupsAndTextToSession(jobj, session):
 	body = convertAndClean(jobj['body'])
-	tempOut.write(jobj['name']+'\n')
-	tempOut.write("___OLD___:\n"+body+'\n\n')
+	# tempOut.write(jobj['name']+'\n')
+	# tempOut.write("___OLD___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body)
-	tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
+	# tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
 	fixedTObjs, fixedbody = stripAllTagsAndFixStartEnd(tObjs, body)
-	tempOut.write("___NEW___:\n"+fixedbody+'\n\n')
-	tempOut.write("tObjs:\n"+str(fixedTObjs)+"\n\n\n\n")
+	# tempOut.write("___NEW___:\n"+fixedbody+'\n\n')
+	# tempOut.write("tObjs:\n"+str(fixedTObjs)+"\n\n\n\n")
+	fixedTObjs = addTextToTagObjects(fixedTObjs, fixedbody)
+	jobj['newBody'] = fixedbody
+	text_id = addTextObjectToSession(jobj, session)
+	for tObj in fixedTObjs:
+		addTagObjectToSession(tObj, session, text_id)
 
 # markdown -> html tags
 def convertAndClean(body):
@@ -337,16 +363,21 @@ def getAllTagObjects(body):
 	for tag in tagRe:
 		matches = re.finditer(tagRe[tag], body)
 		for m in matches:
-			tObjs.append(matchToTagObject(m, tag))
+			tObjs.append(matchToTagObject(m, tag, body))
 	return tObjs
 
-def matchToTagObject(match, tag):
+def matchToTagObject(match, tag, body):
 	tObj = {
 		'type': 	tag,
 		'start':	match.start(),
 		'end':		match.end(),
-		# don't store text yet - remove nested tags from body
+		'url': 		None,
+		'text':		None
 	}
+	if tag == 'link':
+		tagText = body[tObj['start']:tObj['end']]
+		firstTag = re.findall(r'(?i)(<a[^>]+>)', tagText)[0]
+		tObj['url'] = firstTag[9:-2]
 	return tObj
 
 def stripAllTagsAndFixStartEnd(tObjs, body):
@@ -360,162 +391,67 @@ def stripAllTagsAndFixStartEnd(tObjs, body):
 		oldEnd = tObj['end']
 		tObj['start'] -= r
 		tObj['end'] -= r
-		print(tObj['start'], r)
-		if tObj['type'] != 'link':
-			# removeO, C = how many characters the opening, closing tags take
-			newbody, removeO, removeC = stripTag(tObj, newbody)
-			# <type>text</type>
-			# type appears twice, <></> = 5 extra chars
-			tObj['end'] -= removeO+removeC
-			r += removeO
-			# deal with nested tags:
-			# if some tag in fixed envelopes this tObj
-			# subtract how much we just removed from its end position
-			for f in fixed:
-				if f['end'] > tObj['end']:
-					f['end'] -= removeO+removeC
-			# if there are no nested tags within tObj
-			# add the closing tag amount to r
-			noNest = True
-			for t in tObjs:
-				if t['start'] < tObj['end']:
-					noNest = False
-					break
-			if noNest:
-				r += removeC
+		# if tObj['type'] != 'link':
+		# removeO, C = how many characters the opening, closing tags take
+		newbody, removeO, removeC = stripTag(tObj, newbody)
+		tObj['end'] -= removeO+removeC
+		r += removeO
+		# deal with nested tags:
+		# if some tag in fixed envelopes this tObj
+		# subtract how much we just removed from its end position
+		for f in fixed:
+			if f['end'] > tObj['end']:
+				f['end'] -= removeO+removeC
+		# if there are no nested tags within tObj
+		# add the closing tag amount to r
+		noNest = True
+		for t in tObjs:
+			if t['start'] < tObj['end']:
+				noNest = False
+				break
+		if noNest:
+			r += removeC
 		fixed.append(tObj)
 	return fixed, newbody
 
+# given # of chars, position the open/close tags take up, 
+# remove those chars from the body
 def stripTag(tObj, body):
 	newbody = body
 	s = tObj['start']
 	e = tObj['end']
-	# size of open tag, close tag
-	o = len(tObj['type'])+2
-	c = len(tObj['type'])+3
+	if tObj['type'] != 'link':
+		# size of open tag, close tag
+		o = len(tObj['type'])+2
+		c = len(tObj['type'])+3
+	else:
+		# link: <a href=""></a>
+		o = len(tObj['url'])+11
+		c = 4
 	# remove end tag first because indices count from start of string
 	newbody = newbody[0:e-c] + newbody[e:]
 	newbody = newbody[0:s] + newbody[s+o:]
 	return newbody, o, c
 
+def addTextToTagObjects(tObjs, body):
+	for tObj in tObjs:
+		tObj['text'] = body[tObj['start']:tObj['end']]
+	return tObjs
 
-"""
-# create a markup table object
-# for each slice of marked up text in the 'body' field
-# add to session
-def addAllMarkupsToSession(jobj, session):
-	print(jobj['name'])
-	# body = convertAndClean(jobj['body'])
-	# print(body)
-	body = jobj['body']
-	allMarkups = []
-	mIndex = 0
-	allMarkups += findMarkupObjectsFromType("italic",markRe['italic'],body, mIndex)
-	allMarkups += findMarkupObjectsFromType("bold",markRe['bold'],body, mIndex)
-	# allMarkups += findMarkupObjectsFromType("strikethrough",markRe['strikethrough'],body, mIndex)
-	# allMarkups += findMarkupObjectsFromType("quote",markRe['quote'],body, mIndex)
-	# allMarkups += findMarkupObjectsFromType("link",markRe['link'],body, mIndex)
-	allMarkups = markNestedMarkups(allMarkups)
-	allMarkups = sorted(allMarkups, key=lambda k: k['start'])
-	for m in allMarkups:
-		print("   ",m['type'])
-		print("   ",m['start'],m['end'])
-		print("   ",m['text'])
-	allMarkups, body = removeMarkupAndFixIndices(allMarkups, body)
-
-# use markdown2 to convert to html tags
-def convertAndClean(body):
-	body = body.replace('&gt;','>')
-	body = md.markdown(body)
-	body = body.replace('<p>','')
-	body = body.replace('</p>','')
-	return body
-
-# helper for the add(markup type) functions
-# given a markup symbol (*),(**),(~), etc
-# return a list of dicts:
-# 	text: inside the markup (including markup symbols): 	(str)
-# 	start: the start position: 								(int)
-# 	end: the end position:									(int)
-def findMarkupObjectsFromType(mtype, regex, body, mIndex):
-	matchObjs = re.finditer(regex,body)
-	markupObjs = []
-	for matchObj in matchObjs:
-		mark = {
-			'type':		mtype,
-			'text':		matchObj.group(),
-			'start':	matchObj.start(),
-			'end':		matchObj.end(),
-			'index':	mIndex,
-			# -1 indicates not nested
-			# 0+ gives index of MarkupObject this one is nested inside
-			'nested':	-1,
-			# only int used if type = list
-			'listindex':None,
-		}
-		markupObjs.append(mark)
-	return(markupObjs)
-
-def markNestedMarkups(allMarkups):
-	for mObj in allMarkups:
-		pass
-	return allMarkups
-
-# take list of markupObjects
-# replace each markup char with ♣ (alt+5465) in body text
-# also take out markup from markupObject text
-# fix start, end values to be correct after markup is removed
-# then go back and take out all ♣ from body
-# markupObjects, body text both ready for insertion
-def removeMarkupAndFixIndices(mObjs, body):
-	# counter for how many characters need to be removed from text
-	removed = 0
-	for mObj in mObjs:
-		print(mObj)
-		# offset start, end indices by how much we've already removed
-		mObj['start'] = mObj['start'] - removed
-		mObj['end'] = mObj['end'] - removed
-		
-		if mObj['type'] == 'italic':
-			mObj, removed, body = removeItalic(mObj, removed, body)
-		if mObj['type'] == 'bold':
-			mObj, removed, body = removeBold(mObj, removed, body)
-		if mObj['type'] == 'strikethrough':
-			mObj, removed, body = removeStrikethrough(mObj, removed, body)
-		if mObj['type'] == 'quote':
-			mObj, removed, body = removeQuote(mObj, removed, body)
-		print(mObj)
-		print(body)
-	# now mObjs have correct start/end, body only has ♣ chars, no markup
-	return mObjs, body
-
-
-def removeItalic(mObj, removed, body):
-	removed += 2
-	oldText = mObj['text']
-	# remove first and last chars
-	mObj['text'] = mObj['text'][1:-1]
-	# trying to replace directly without using ♣ 
-	body = body.replace(oldText, mObj['text'])
-	mObj['end'] = mObj['end'] - 2
-	return mObj, removed, body
-
-
-def removeBold(mObj, removed, body):
-	removed += 4
-	oldText = mObj['text']
-	mObj['text'] = mObj['text'][2:-2]
-	body = body.replace(oldText, mObj['text'])
-	mObj['end'] = mObj['end'] - 4
-	return mObj, removed, body
-
-def removeStrikethrough(mObj, removed, body):
-	return mObj, removed, body
-
-# take out all '&gt;', treat as one quote
-def removeQuote(mObj, removed, body):
-	return mObj, removed, body
-"""
+def addTagObjectToSession(tObj, session, text_id):
+	attributeObj = {}
+	if tObj['url'] != None:
+		attributeObj['href'] = tObj['url']
+	basic_markup = Basic_Markup(
+		dataset_id 		= reddit_id,
+		text_id 		= text_id,
+		markup_id 		= basic_markup_inc,
+		start 			= tObj['start'],
+		end 			= tObj['end'],
+		type_name		= tagToType[tObj['type']],
+		attribute_str	= attributeObj
+		)
+	session.add(basic_markup)
 
 ###################################
 # Execution starts here
@@ -535,7 +471,7 @@ def main():
 	db = sys.argv[4]
 	
 	# raw text -> json dicts
-	data = open(data,'r')
+	data = open(data,'r', encoding='utf8')
 	jobjs = jsonDataToDict(data)
 
 	# connect to server, bind metadata, create session
