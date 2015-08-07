@@ -1,8 +1,9 @@
 /*
-# scrub the database of any reddit material
+# nuke the database of any reddit material
 # be careful
 use iac;
 delete from subreddits where dataset_id = 6;
+delete from discussions where dataset_id = 6;
 delete from authors where dataset_id = 6;
 delete from posts where dataset_id = 6;
 delete from texts where dataset_id = 6;
@@ -17,4 +18,6 @@ delete from texts where dataset_id = 6;
 
 # alter table discussions add subreddit_id int(10);
 
-# select * from discussions;
+# SELECT * FROM texts WHERE dataset_id = 6;
+
+delete from texts where dataset_id = 6;
