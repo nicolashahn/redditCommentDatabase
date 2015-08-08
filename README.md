@@ -32,6 +32,6 @@ Add row to datasets for reddit (default dataset_id = 6, change this in the scrip
 Add to 'basic_markup' table: markup_group_id: int(11)
   - useful for grouping nested quotes, lists
     
-Change in 'discussions' table: native_discussion_id from int(10) -> varchar(12)
+Change in 'discussions' AND 'posts' tables: native_discussion_id from int(10) -> varchar(12)
   - because reddit stores native ids as strings
 

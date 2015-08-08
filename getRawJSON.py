@@ -14,8 +14,7 @@ from sqlalchemy.dialects import mysql
 import sys
 import re
 import markdown2 as md
-import bs4
-
+import datetime
 
 ###################################
 # Global variables
@@ -161,12 +160,18 @@ def generateTableClasses(eng):
 # add to session
 # pushes to server in main()
 def createTableObjects(jobj, session):
-
+	print(jobj['created_utc'])
+	print(
+		datetime.datetime.fromtimestamp(
+			int(jobj['created_utc'])
+			).strftime('%Y-%m-%d %H:%M:%S')
+		)
 	# addSubredditToSession(jobj,session)
 	# addDiscussionToSession(jobj,session)
 	# addAuthorToSession(jobj,session)
-	addMarkupsAndTextToSession(jobj,session)
+	# addMarkupsAndTextToSession(jobj,session)
 	# addPostToSession(jobj,session)
+	pass
 
 
 # check the dict to see if the subreddit is in the db already
@@ -231,12 +236,15 @@ def addTextObjectToSession(jobj, session):
 
 
 def addPostToSession(jobj, session):
+	ts = datetime.datetime.fromtimestamp(
+			int(jobj['created_utc'])
+			).strftime('%Y-%m-%d %H:%M:%S')
 	post = Post(
 		dataset_id 		= reddit_id,
 		discussion_id 	= jobj['discussion_iac_id'],
 		post_id 		= post_inc.inc(),
 		author_id 		= jobj['author_iac_id'],
-		# timestamp		= 
+		timestamp		= ts
 
 		)
 	
