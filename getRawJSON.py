@@ -42,15 +42,15 @@ tempOut = open('tempOut','w', encoding='utf8')
 # json text dump -> list of json-dicts
 # also encodes the line number the object in the raw file
 def jsonDataToDict(data):
-	jobjs = []
+	jObjs = []
 	i = 0
 	for line in data:
 		i += 1
 		jline = json.loads(line)
 		jline['line_no'] = i
-		jobjs.append(jline)
+		jObjs.append(jline)
 		# print([x+": "+str(jline[x]) for x in sorted(jline)])
-	return jobjs
+	return jObjs
 
 
 # ALL JSON FIELDS IN AN OBJECT
@@ -159,37 +159,33 @@ def generateTableClasses(eng):
 # load each json field data into the proper table object
 # add to session
 # pushes to server in main()
-def createTableObjects(jobj, session):
-	print(jobj['created_utc'])
-	print(
-		datetime.datetime.fromtimestamp(
-			int(jobj['created_utc'])
-			).strftime('%Y-%m-%d %H:%M:%S')
-		)
-	# addSubredditToSession(jobj,session)
-	# addDiscussionToSession(jobj,session)
-	# addAuthorToSession(jobj,session)
-	# addMarkupsAndTextToSession(jobj,session)
-	# addPostToSession(jobj,session)
+# NOTE: must be done in this order, each one inserts a new
+# field into the jObj which later functions use
+def createTableObjects(jObj, session):
+	# addSubredditToSession(jObj,session)
+	# addDiscussionToSession(jObj,session)
+	# addAuthorToSession(jObj,session)
+	addMarkupsAndTextToSession(jObj,session)
+	# addPostToSession(jObj,session)
 	pass
 
 
 # check the dict to see if the subreddit is in the db already
 # if not, insert a new subreddit to the session
-# if so, simply add an object to jobj: 'subreddit_iac_id'
+# if so, simply add an object to jObj: 'subreddit_iac_id'
 # use this when inserting the post object
-def addSubredditToSession(jobj, session):
-	if jobj['subreddit_id'] not in subreddit_dict:
+def addSubredditToSession(jObj, session):
+	if jObj['subreddit_id'] not in subreddit_dict:
 		# example: {'t5_0d032da': 43}
-		subreddit_dict[jobj['subreddit_id']] = subreddit_inc.inc()
+		subreddit_dict[jObj['subreddit_id']] = subreddit_inc.inc()
 		subreddit = Subreddit(
 			dataset_id 			= reddit_id,
-			subreddit_id 		= subreddit_dict[jobj['subreddit_id']],
-			subreddit_name 		= jobj['subreddit'],
-			subreddit_native_id = jobj['subreddit_id']
+			subreddit_id 		= subreddit_dict[jObj['subreddit_id']],
+			subreddit_name 		= jObj['subreddit'],
+			subreddit_native_id = jObj['subreddit_id']
 			)
 		session.add(subreddit)
-	jobj['subreddit_iac_id'] = subreddit_dict[jobj['subreddit_id']]
+	jObj['subreddit_iac_id'] = subreddit_dict[jObj['subreddit_id']]
 
 
 # for our purposes, link and discussion are synonymous
@@ -199,63 +195,106 @@ def addSubredditToSession(jobj, session):
 # so just insert the native id for now
 # works basically the same as subreddit
 # todo: create a script to run after all insertions to fill in url, title
-def addDiscussionToSession(jobj, session):
-	if jobj['link_id'] not in link_dict:
-		link_dict[jobj['link_id']] = discussion_inc.inc()
+def addDiscussionToSession(jObj, session):
+	if jObj['link_id'] not in link_dict:
+		link_dict[jObj['link_id']] = discussion_inc.inc()
 		discussion = Discussion(
 			dataset_id 			= reddit_id,
-			discussion_id 		= link_dict[jobj['link_id']],
-			native_discussion_id= jobj['link_id'],
-			subreddit_id 		= subreddit_dict[jobj['subreddit_id']]
+			discussion_id 		= link_dict[jObj['link_id']],
+			native_discussion_id= jObj['link_id'],
+			subreddit_id 		= subreddit_dict[jObj['subreddit_id']]
 			)
 		session.add(discussion)
-	jobj['discussion_iac_id'] = link_dict[jobj['link_id']]
+	jObj['discussion_iac_id'] = link_dict[jObj['link_id']]
 
 
-def addAuthorToSession(jobj, session):
-	if jobj['author'] not in author_dict:
-		author_dict[jobj['author']] = author_inc.inc()
+def addAuthorToSession(jObj, session):
+	if jObj['author'] not in author_dict:
+		author_dict[jObj['author']] = author_inc.inc()
 		author = Author(
 			dataset_id = reddit_id, 
-			author_id  = author_dict[jobj['author']],
-			username   = jobj["author"] 
+			author_id  = author_dict[jObj['author']],
+			username   = jObj["author"] 
 			)
 		session.add(author)
-	jobj['author_iac_id'] = author_dict[jobj['author']]
+	jObj['author_iac_id'] = author_dict[jObj['author']]
 
+# convert markdown body to html tags
+# then get each tag object
+# remove tags and make sure indices of each tag object are correct
+# add the inner text to the tag object
+# push both the tag objects, cleaned up body text to session
+def addMarkupsAndTextToSession(jObj, session):
+	# REMOVE THIS AFTER BUG FIX
+	if jObj['name'] == 't1_cnas94y':
+		body = convertAndClean(jObj['body'])
+		tempOut.write(jObj['name']+'\n')
+		tempOut.write("___OLD___:\n"+body+'\n\n')
+		tObjs = getAllTagObjects(body)
+		tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
+		fixedTObjs, fixedbody = stripAllTagsAndFixStartEnd(tObjs, body)
+		tempOut.write("___NEW___:\n"+fixedbody+'\n\n')
+		tempOut.write("tObjs:\n"+str(fixedTObjs)+"\n\n\n\n")
+		fixedTObjs = addTextToTagObjects(fixedTObjs, fixedbody)
+		jObj['newBody'] = fixedbody
+		addTextObjectToSession(jObj, session)
+		for tObj in fixedTObjs:
+			addTagObjectToSession(tObj, jObj, session)
 
-def addTextObjectToSession(jobj, session):
+def addTextObjectToSession(jObj, session):
 	text_id = text_inc.inc()
 	text = Text(
 		dataset_id 	= reddit_id,
 		text_id 	= text_id,
-		text 		= jobj['newBody'].encode(encoding='utf8')
+		text 		= jObj['newBody'].encode(encoding='utf8')
 		)
 	session.add(text)
-	return text_id
+	jObj['text_iac_id'] = text_id
 
-
-def addPostToSession(jobj, session):
-	ts = datetime.datetime.fromtimestamp(
-			int(jobj['created_utc'])
-			).strftime('%Y-%m-%d %H:%M:%S')
-	post = Post(
+def addTagObjectToSession(tObj, jObj, session):
+	attributeObj = {}
+	if tObj['url'] != None:
+		attributeObj['href'] = tObj['url']
+	basic_markup = Basic_Markup(
 		dataset_id 		= reddit_id,
-		discussion_id 	= jobj['discussion_iac_id'],
-		post_id 		= post_inc.inc(),
-		author_id 		= jobj['author_iac_id'],
-		timestamp		= ts
-
+		text_id 		= jObj['text_iac_id'],
+		# markup_id 		= basic_markup_inc.inc(),
+		start 			= tObj['start'],
+		end 			= tObj['end'],
+		type_name		= tagToType[tObj['type']],
+		# attribute_str	= attributeObj
 		)
+	session.add(basic_markup)
+
+def addPostToSession(jObj, session):
+	ts = datetime.datetime.fromtimestamp(
+			int(jObj['created_utc'])
+			).strftime('%Y-%m-%d %H:%M:%S')
+	if jObj['name'] not in post_dict:
+		post_dict[jObj['name']] = post_inc.inc()
+	# if the parent_id is a comment (not a link or subreddit)
+	parent_id = None
+	if jObj['parent_id'][:2] == 't3':
+		if jObj['parent_id'] not in post_dict:
+			post_dict['parent_id'] = post_inc.inc()
+		parent_id = post_dict['parent_id']
+	post = Post(
+		dataset_id 			= reddit_id,
+		discussion_id 		= jObj['discussion_iac_id'],
+		post_id 			= post_dict[jObj['name']],
+		author_id 			= jObj['author_iac_id'],
+		timestamp			= ts,
+		parent_post_id		= parent_id,
+		native_post_id  	= jObj['name'],
+		text_id				= jObj['text_iac_id'],
+		# parent_relation_id 	= 
+		# votes				=
+		)
+	session.add(post)
 	
 
 ####################################
-# 	Markup
-# 
-# - get each instance of markup
-# 	- each time a bit of text is italic/bold/strikethough/etc
-# - turn into a basic_markup table object
-# - add to session
+# 	Markup Helper Functions
 ####################################
 
 
@@ -314,26 +353,6 @@ tagToType = {
 	'sup':				'superscript'
 }
 
-# convert markdown body to html tags
-# then get each tag object
-# remove tags and make sure indices of each tag object are correct
-# add the inner text to the tag object
-# push both the tag objects, cleaned up body text to session
-def addMarkupsAndTextToSession(jobj, session):
-	body = convertAndClean(jobj['body'])
-	# tempOut.write(jobj['name']+'\n')
-	# tempOut.write("___OLD___:\n"+body+'\n\n')
-	tObjs = getAllTagObjects(body)
-	# tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
-	fixedTObjs, fixedbody = stripAllTagsAndFixStartEnd(tObjs, body)
-	# tempOut.write("___NEW___:\n"+fixedbody+'\n\n')
-	# tempOut.write("tObjs:\n"+str(fixedTObjs)+"\n\n\n\n")
-	fixedTObjs = addTextToTagObjects(fixedTObjs, fixedbody)
-	jobj['newBody'] = fixedbody
-	text_id = addTextObjectToSession(jobj, session)
-	for tObj in fixedTObjs:
-		addTagObjectToSession(tObj, session, text_id)
-
 # markdown -> html tags
 def convertAndClean(body):
 	newbody = body.replace('&gt;','>')
@@ -374,6 +393,7 @@ def getAllTagObjects(body):
 			tObjs.append(matchToTagObject(m, tag, body))
 	return tObjs
 
+# converts re's MatchObject to a tag object
 def matchToTagObject(match, tag, body):
 	tObj = {
 		'type': 	tag,
@@ -399,6 +419,9 @@ def stripAllTagsAndFixStartEnd(tObjs, body):
 		oldEnd = tObj['end']
 		tObj['start'] -= r
 		tObj['end'] -= r
+		tempOut.write('\n\n\nITERATION '+str(i)+'\n'+tObj['type']+' '+str(tObj['start'])+' '+str(tObj['end'])+'\n')
+		tempOut.write(newbody[tObj['start']:tObj['end']]+'\n\n\n\n')
+		tempOut.write(newbody)
 		# if tObj['type'] != 'link':
 		# removeO, C = how many characters the opening, closing tags take
 		newbody, removeO, removeC = stripTag(tObj, newbody)
@@ -410,15 +433,11 @@ def stripAllTagsAndFixStartEnd(tObjs, body):
 		for f in fixed:
 			if f['end'] > tObj['end']:
 				f['end'] -= removeO+removeC
-		# if there are no nested tags within tObj
-		# add the closing tag amount to r
-		noNest = True
 		for t in tObjs:
-			if t['start'] < tObj['end']:
-				noNest = False
-				break
-		if noNest:
-			r += removeC
+			if t['start'] <= oldEnd:
+				t['start'] += removeC
+				t['end'] += removeC
+		r += removeC
 		fixed.append(tObj)
 	return fixed, newbody
 
@@ -446,21 +465,6 @@ def addTextToTagObjects(tObjs, body):
 		tObj['text'] = body[tObj['start']:tObj['end']]
 	return tObjs
 
-def addTagObjectToSession(tObj, session, text_id):
-	attributeObj = {}
-	if tObj['url'] != None:
-		attributeObj['href'] = tObj['url']
-	basic_markup = Basic_Markup(
-		dataset_id 		= reddit_id,
-		text_id 		= text_id,
-		markup_id 		= basic_markup_inc,
-		start 			= tObj['start'],
-		end 			= tObj['end'],
-		type_name		= tagToType[tObj['type']],
-		attribute_str	= attributeObj
-		)
-	session.add(basic_markup)
-
 ###################################
 # Execution starts here
 ###################################
@@ -480,7 +484,7 @@ def main():
 	
 	# raw text -> json dicts
 	data = open(data,'r', encoding='utf8')
-	jobjs = jsonDataToDict(data)
+	jObjs = jsonDataToDict(data)
 
 	# connect to server, bind metadata, create session
 	eng = connect(user, pword, db)
@@ -491,16 +495,16 @@ def main():
 	generateTableClasses(eng)
 
 	# show all fields + types
-	# [print(x, jobjs[8][x].__class__) for x in sorted(jobjs[8])]
+	# [print(x, jObjs[8][x].__class__) for x in sorted(jObjs[8])]
 
 	# show fields with actual example values
-	# [print(x, jobjs[8][x]) for x in sorted(jobjs[8])]
+	# [print(x, jObjs[8][x]) for x in sorted(jObjs[8])]
 
 	# now ready to start inserting to database
-	for jobj in jobjs:
-		# if jobj['line_no'] == 21:
-		# 	addMarkupObjects(jobj, session)
-		createTableObjects(jobj,session)
+	for jObj in jObjs:
+		# if jObj['line_no'] == 21:
+		# 	addMarkupObjects(jObj, session)
+		createTableObjects(jObj,session)
 		# finally, commit all table object to database
 		session.commit()
 
