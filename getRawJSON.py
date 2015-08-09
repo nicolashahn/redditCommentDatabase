@@ -162,12 +162,11 @@ def generateTableClasses(eng):
 # NOTE: must be done in this order, each one inserts a new
 # field into the jObj which later functions use
 def createTableObjects(jObj, session):
-	# addSubredditToSession(jObj,session)
-	# addDiscussionToSession(jObj,session)
-	# addAuthorToSession(jObj,session)
+	addSubredditToSession(jObj,session)
+	addDiscussionToSession(jObj,session)
+	addAuthorToSession(jObj,session)
 	addMarkupsAndTextToSession(jObj,session)
-	# addPostToSession(jObj,session)
-	pass
+	addPostToSession(jObj,session)
 
 
 # check the dict to see if the subreddit is in the db already
@@ -219,38 +218,50 @@ def addAuthorToSession(jObj, session):
 		session.add(author)
 	jObj['author_iac_id'] = author_dict[jObj['author']]
 
-# convert markdown body to html tags
+# convert markdown body to html tags, making sure to get nested
 # then get each tag object
 # remove tags and make sure indices of each tag object are correct
 # add the inner text to the tag object
 # push both the tag objects, cleaned up body text to session
 def addMarkupsAndTextToSession(jObj, session):
-	# REMOVE THIS AFTER BUG FIX
-	if jObj['name'] == 't1_cnas94y':
-		body = convertAndClean(jObj['body'])
-		tempOut.write(jObj['name']+'\n')
-		tempOut.write("___OLD___:\n"+body+'\n\n')
-		tObjs = getAllTagObjects(body)
-		tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
-		fixedTObjs, fixedbody = stripAllTagsAndFixStartEnd(tObjs, body)
-		tempOut.write("___NEW___:\n"+fixedbody+'\n\n')
-		tempOut.write("tObjs:\n"+str(fixedTObjs)+"\n\n\n\n")
-		fixedTObjs = addTextToTagObjects(fixedTObjs, fixedbody)
-		jObj['newBody'] = fixedbody
-		addTextObjectToSession(jObj, session)
-		for tObj in fixedTObjs:
-			addTagObjectToSession(tObj, jObj, session)
+	# don't need to add text_id in addTextObject()
+	# because always have exactly 1 text object
+	jObj['text_iac_id'] = text_inc.inc()
+	body = jObj['body']
+	addedTags = True
+	# keep adding tags until all markup replaced
+	while addedTags == True:
+		body, addedTags = convertAndClean(body)
+	tempOut.write(jObj['name']+'\n')
+	tempOut.write("___OLD___:\n"+body+'\n\n')
+	tObjs = getAllTagObjects(body)
+	# to keep track of if we're still getting more tags
+	new_tObjs = tObjs
+	while len(new_tObjs) != 0:
+		# tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
+		orig_tObjs, body = stripAllTagsAndFixStartEnd(tObjs, body)
+		tempOut.write("___NEW___:\n"+body+'\n\n')
+		# tempOut.write("tObjs:\n"+str(fixedTOb/js)+"\n\n\n\n")
+		# try to get more tags in case we have nested quotes or some such
+		new_tObjs = getAllTagObjects(body)
+		print('new tags:', new_tObjs)
+		tObjs = orig_tObjs + new_tObjs
+	tObjs = addTextToTagObjects(tObjs, body)
+	for tObj in tObjs:
+		addTagObjectToSession(tObj, jObj, session)
+	jObj['newBody'] = body
+	addTextObjectToSession(jObj, session)
 
 def addTextObjectToSession(jObj, session):
-	text_id = text_inc.inc()
+	# text_id = text_inc.inc()
+	# jObj['text_iac_id'] = text_id
 	text = Text(
 		dataset_id 	= reddit_id,
-		text_id 	= text_id,
+		text_id 	= jObj['text_iac_id'],
 		text 		= jObj['newBody'].encode(encoding='utf8')
 		)
 	session.add(text)
-	jObj['text_iac_id'] = text_id
-
+	
 def addTagObjectToSession(tObj, jObj, session):
 	attributeObj = {}
 	if tObj['url'] != None:
@@ -308,11 +319,11 @@ markRe = {
 	# links are tricky, keeps grabbing spaces as well - not finished
 	'link':				r'(\[.*\]\([^\)\s]+\))',
 	'header':			r'(\#+.+\s)',
-	# unordered list
+	# unordered list item
 	'ulist':			r'([\*\+\-] .*\n)',
-	# ordered list
+	# ordered list item
 	'olist':			r'([0-9]+\. .*\n)',
-	'superscript':		r'(\^[^\s\n\<\>\]\[\)\(]+)(?=[\s\n\<\>\]\[\)\(])',
+	'superscript':		r'(\^[^\s\n\<\>\]\[\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
 }
 
 # same as above but for html tags instead
@@ -321,7 +332,7 @@ tagRe = {
 	'strong':			r'(\<strong\>[\s\S]+?\<\/strong\>)',
 	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
 	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
-	'link':				r'(?i)(<a[^>]+?>.+?</a>)',
+	'link':				r'(?i)(<a[^>]+?>.*?</a>)',
 	'h1':				r'(\<h1\>[\s\S]+?\<\/h1\>)',
 	'h2':				r'(\<h2\>[\s\S]+?\<\/h2\>)',
 	'h3':				r'(\<h3\>[\s\S]+?\<\/h3\>)',
@@ -332,6 +343,8 @@ tagRe = {
 	'ol':				r'(\<ol\>[\s\S]+?\<\/ol\>)',
 	'li':				r'(\<li\>[\s\S]+?\<\/li\>)',
 	'sup':				r'(\<sup\>[\s\S]+?\<\/sup\>)',
+	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
+	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 }
 
 # html tag names -> MySQL type names
@@ -350,7 +363,9 @@ tagToType = {
 	'ul':				'unorderList',
 	'ol':				'orderedList',
 	'li':				'listItem',
-	'sup':				'superscript'
+	'sup':				'superscript',
+	'pre':				'pre',
+	'code':				'code',
 }
 
 # markdown -> html tags
@@ -363,7 +378,8 @@ def convertAndClean(body):
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
 	newbody = replaceStrikethroughTags(newbody)
-	return newbody
+	addedTags = body != newbody
+	return newbody, addedTags
 
 # markdown2 replaces all Reddit markdown except strikethrough, superscript
 # so do it here manually
@@ -400,7 +416,8 @@ def matchToTagObject(match, tag, body):
 		'start':	match.start(),
 		'end':		match.end(),
 		'url': 		None,
-		'text':		None
+		'text':		None,
+		'processed':False,
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
@@ -408,37 +425,43 @@ def matchToTagObject(match, tag, body):
 		tObj['url'] = firstTag[9:-2]
 	return tObj
 
+# gnarly and ugly, but seems to work
 def stripAllTagsAndFixStartEnd(tObjs, body):
 	newbody = body
-	# how many characters we've already removed
+	# r = how many characters we've already removed
 	r = 0
 	fixed = []
+	# sort by original start position
 	tObjs = sorted(tObjs, key=lambda k: k['start'])
 	for i in range(len(tObjs)):
 		tObj = tObjs.pop(0)
-		oldEnd = tObj['end']
-		tObj['start'] -= r
-		tObj['end'] -= r
-		tempOut.write('\n\n\nITERATION '+str(i)+'\n'+tObj['type']+' '+str(tObj['start'])+' '+str(tObj['end'])+'\n')
-		tempOut.write(newbody[tObj['start']:tObj['end']]+'\n\n\n\n')
-		tempOut.write(newbody)
-		# if tObj['type'] != 'link':
-		# removeO, C = how many characters the opening, closing tags take
-		newbody, removeO, removeC = stripTag(tObj, newbody)
-		tObj['end'] -= removeO+removeC
-		r += removeO
-		# deal with nested tags:
-		# if some tag in fixed envelopes this tObj
-		# subtract how much we just removed from its end position
-		for f in fixed:
-			if f['end'] > tObj['end']:
-				f['end'] -= removeO+removeC
-		for t in tObjs:
-			if t['start'] <= oldEnd:
-				t['start'] += removeC
-				t['end'] += removeC
-		r += removeC
-		fixed.append(tObj)
+		if tObj['processed'] == False:
+			oldEnd = tObj['end']
+			tObj['start'] -= r
+			tObj['end'] -= r
+			# tempOut.write('\n\n\nITERATION '+str(i)+'\n'+tObj['type']+' '+str(tObj['start'])+' '+str(tObj['end'])+'\n')
+			# tempOut.write(newbody[tObj['start']:tObj['end']]+'\n\n\n\n')
+			# tempOut.write(newbody)
+			# if tObj['type'] != 'link':
+			# removeO, C = how many characters the opening, closing tags take
+			newbody, removeO, removeC = stripTag(tObj, newbody)
+			tObj['end'] -= removeO+removeC
+			r += removeO
+			# deal with nested tags:
+			# if some tag in fixed envelopes this tObj
+			# subtract how much we just removed from its end position
+			for f in fixed:
+				if f['end'] > tObj['end']:
+					f['end'] -= removeO+removeC
+			# if we have nested tag later in the list
+			# add the closing tag size to offset when we subtract it later
+			for t in tObjs:
+				if t['start'] <= oldEnd:
+					t['start'] += removeC
+					t['end'] += removeC
+			r += removeC
+			tObj['processed'] = True
+			fixed.append(tObj)
 	return fixed, newbody
 
 # given # of chars, position the open/close tags take up, 
@@ -474,7 +497,7 @@ def main():
 	if len(sys.argv) != 5:
 		print("Incorrect number of arguments given")
 		print("Usage: python getRawJSON [username] [password] [JSON data file] [host/database name]")
-		print("Example: python getRawJSON root password sampleComments localhost/reddit")
+		print("Example: python getRawJSON root password sampleComments localhost/iac")
 		sys.exit(1)
 
 	user = sys.argv[1]
@@ -482,16 +505,11 @@ def main():
 	data = sys.argv[3]
 	db = sys.argv[4]
 	
-	# raw text -> json dicts
 	data = open(data,'r', encoding='utf8')
 	jObjs = jsonDataToDict(data)
-
-	# connect to server, bind metadata, create session
 	eng = connect(user, pword, db)
 	metadata = s.MetaData(bind=eng)
 	session = createSession(eng)
-
-	# creates a table class and autoincrementer for each table in the database
 	generateTableClasses(eng)
 
 	# show all fields + types
@@ -500,16 +518,9 @@ def main():
 	# show fields with actual example values
 	# [print(x, jObjs[8][x]) for x in sorted(jObjs[8])]
 
-	# now ready to start inserting to database
 	for jObj in jObjs:
-		# if jObj['line_no'] == 21:
-		# 	addMarkupObjects(jObj, session)
 		createTableObjects(jObj,session)
-		# finally, commit all table object to database
 		session.commit()
-
-	
-		
 
 if __name__ == "__main__":
 	main()
