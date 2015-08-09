@@ -232,22 +232,22 @@ def addMarkupsAndTextToSession(jObj, session):
 	# keep adding tags until all markup replaced
 	while addedTags == True:
 		body, addedTags = convertAndClean(body)
-	tempOut.write(jObj['name']+'\n')
-	tempOut.write("___OLD___:\n"+body+'\n\n')
+	# tempOut.write(jObj['name']+'\n')
+	# tempOut.write("___OLD___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body)
 	# to keep track of if we're still getting more tags
 	new_tObjs = tObjs
 	while len(new_tObjs) != 0:
 		# tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
 		orig_tObjs, body = stripAllTagsAndFixStartEnd(tObjs, body)
-		tempOut.write("___NEW___:\n"+body+'\n\n')
+		# tempOut.write("___NEW___:\n"+body+'\n\n')
 		# tempOut.write("tObjs:\n"+str(fixedTOb/js)+"\n\n\n\n")
 		# try to get more tags in case we have nested quotes or some such
 		new_tObjs = getAllTagObjects(body)
-		print('new tags:', new_tObjs)
 		tObjs = orig_tObjs + new_tObjs
 	tObjs = addTextToTagObjects(tObjs, body)
 	for tObj in tObjs:
+		print(tObj)
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
 	addTextObjectToSession(jObj, session)
@@ -263,9 +263,6 @@ def addTextObjectToSession(jObj, session):
 	session.add(text)
 	
 def addTagObjectToSession(tObj, jObj, session):
-	attributeObj = {}
-	if tObj['url'] != None:
-		attributeObj['href'] = tObj['url']
 	basic_markup = Basic_Markup(
 		dataset_id 		= reddit_id,
 		text_id 		= jObj['text_iac_id'],
@@ -275,6 +272,8 @@ def addTagObjectToSession(tObj, jObj, session):
 		type_name		= tagToType[tObj['type']],
 		# attribute_str	= attributeObj
 		)
+	if tObj['url'] != None:
+		basic_markup.attribute_str = '{"href": "'+tObj['url']+'"}'
 	session.add(basic_markup)
 
 def addPostToSession(jObj, session):
@@ -378,6 +377,7 @@ def convertAndClean(body):
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
 	newbody = replaceStrikethroughTags(newbody)
+	newbody = newbody.replace('<hr />', '')
 	addedTags = body != newbody
 	return newbody, addedTags
 
@@ -412,12 +412,13 @@ def getAllTagObjects(body):
 # converts re's MatchObject to a tag object
 def matchToTagObject(match, tag, body):
 	tObj = {
-		'type': 	tag,
-		'start':	match.start(),
-		'end':		match.end(),
-		'url': 		None,
-		'text':		None,
-		'processed':False,
+		'type': 		tag,
+		'start':		match.start(),
+		'end':			match.end(),
+		# only used for link tags
+		'url': 			None,
+		'text':			None,
+		'processed':	False,
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
@@ -471,7 +472,7 @@ def stripTag(tObj, body):
 	s = tObj['start']
 	e = tObj['end']
 	if tObj['type'] != 'link':
-		# size of open tag, close tag
+		# size of open tag, close tag <></>
 		o = len(tObj['type'])+2
 		c = len(tObj['type'])+3
 	else:
@@ -483,6 +484,7 @@ def stripTag(tObj, body):
 	newbody = newbody[0:s] + newbody[s+o:]
 	return newbody, o, c
 
+# text inside markup added to each tag object
 def addTextToTagObjects(tObjs, body):
 	for tObj in tObjs:
 		tObj['text'] = body[tObj['start']:tObj['end']]
@@ -520,7 +522,7 @@ def main():
 
 	for jObj in jObjs:
 		createTableObjects(jObj,session)
-		session.commit()
+	session.commit()
 
 if __name__ == "__main__":
 	main()
