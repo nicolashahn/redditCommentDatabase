@@ -248,9 +248,8 @@ def addMarkupsAndTextToSession(jObj, session):
 	tObjs = addTextToTagObjects(tObjs, body)
 	tObjs = groupTagObjects(tObjs)
 	for tObj in tObjs:
-		if tObj['type'] == 'li':
-			print(jObj['name'])
-			print(tObj)
+		print(jObj['name'])
+		print(tObj['type'],tObj['group'],tObj['text'])
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
 	addTextObjectToSession(jObj, session)
@@ -383,6 +382,7 @@ def convertAndClean(body):
 	newbody = newbody.replace('</p>','')
 	newbody = replaceStrikethroughTags(newbody)
 	newbody = newbody.replace('<hr />', '')
+	newbody = newbody.replace('<br />', '')
 	addedTags = body != newbody
 	return newbody, addedTags
 
@@ -498,32 +498,70 @@ def addTextToTagObjects(tObjs, body):
 
 # for lists, quotes, superscripts
 def groupTagObjects(tObjs):
-	# relies on tObjs sorted in order of start position
 	tObjs = sorted(tObjs, key=lambda k: k['start'])
-	if len(tObjs) > 0:	
-		prevObj = tObjs[0]
-		currGroup = 1
-		prevObj['group'] = currGroup
-		if len(tObjs) > 1:
-			for tObj in tObjs[1:]:
-				ps = prevObj['start']
-				pe = prevObj['end']
-				ts = tObj['start']
-				te = tObj['end']
-				# if this tag immediately proceeds the previous
-				if (pe + 1 == ts 
-				and prevObj['type'] == 'li'
-				and tObj['type'] == 'li'):
-					tObj['group'] = currGroup
-				# if this tag is nested inside the previous, or vice versa
-				elif ((pe >= te or (ps == ts))
-				and prevObj['type'] == tObj['type']
-				and (tObj['type'] == 'sup' or tObj['type'] == 'blockquote')):
-					tObj['group'] = currGroup
-				else:
-					currGroup += 1
-					tObj['group'] = currGroup
-	return tObjs
+	for tObj in tObjs:
+		tObj['group'] = None
+	currGroup = 1
+	grouped = []
+	for i in range(len(tObjs)):
+		t = tObjs.pop(0)
+		if t['group'] == None:
+			t['group'] = currGroup
+			if t['type'] in ['ul', 'ol']:
+				for i in tObjs:
+					if (i['start'] >= t['start']
+					and i['end'] <= t['end']
+					and i['type'] == 'li'):
+						i['group'] = t['group']
+			elif t['type'] in ['sup','blockquote']:
+				for i in tObjs:
+					if (i['start'] >= t['start']
+					and i['end'] <= t['end']
+					and i['type'] == t['type']):
+						i['group'] = t['group']
+			currGroup += 1
+		grouped.append(t)
+	return grouped
+	# # relies on tObjs sorted in order of start position
+	# tObjs = sorted(tObjs, key=lambda k: k['start'])
+	# for tObj in tObjs:
+	# 	tObj['group'] = None
+	# currGroup = 1
+	# if len(tObjs) > 1:	
+	# 	for i in range(len(tObjs)-1):
+	# 		prevObj = tObjs[i]
+	# 		tObj = tObjs[i+1]
+	# 		prevObj['group'] = currGroup
+	# 		ps = prevObj['start']
+	# 		pe = prevObj['end']
+	# 		pt = prevObj['type']
+	# 		ts = tObj['start']
+	# 		te = tObj['end']
+	# 		tt = tObj['type']
+	# 		# # if this tag immediately proceeds the previous
+	# 		# if ((pe + 1 == ts and pt == 'li' and tt == 'li')
+	# 		# # or this tag is nested in prev or vice versa
+	# 		# or ((pe >= te or (ps == ts)) and ((pt == tt
+	# 		# # and its superscript or blockquote
+	# 		# and (tt == 'sup' or tt == 'blockquote')))
+	# 		# # or it's a list tag (not list item)
+	# 		# or (tt == 'li' and (pt == 'ul' or tt == 'ol')))):
+	# 		# if this tag immediately proceeds the previous
+	# 		if ((pe >= te or ps == ts) and (pt == tt
+	# 		# and its superscript or blockquote
+	# 		and (tt == 'sup' or tt == 'blockquote'))):
+	# 			tObj['group'] = currGroup
+	# 		else:
+	# 			currGroup += 1
+	# 			tObj['group'] = currGroup
+	# 		prevObj = tObj
+	# else:
+	# 	# handles case if 0 or 1 tObjs
+	# 	for tObj in tObjs:
+	# 		tObj['group'] = 1
+	# return tObjs
+
+
 
 
 ###################################
