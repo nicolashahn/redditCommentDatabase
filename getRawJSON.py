@@ -246,8 +246,11 @@ def addMarkupsAndTextToSession(jObj, session):
 		new_tObjs = getAllTagObjects(body)
 		tObjs = orig_tObjs + new_tObjs
 	tObjs = addTextToTagObjects(tObjs, body)
+	tObjs = groupTagObjects(tObjs)
 	for tObj in tObjs:
-		print(tObj)
+		if tObj['type'] == 'li':
+			print(jObj['name'])
+			print(tObj)
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
 	addTextObjectToSession(jObj, session)
@@ -266,14 +269,16 @@ def addTagObjectToSession(tObj, jObj, session):
 	basic_markup = Basic_Markup(
 		dataset_id 		= reddit_id,
 		text_id 		= jObj['text_iac_id'],
-		# markup_id 		= basic_markup_inc.inc(),
+		# markup_id auto increments by itself in MySQL server
 		start 			= tObj['start'],
 		end 			= tObj['end'],
 		type_name		= tagToType[tObj['type']],
-		# attribute_str	= attributeObj
+		# markup_group_id = Null if not part of a group
 		)
 	if tObj['url'] != None:
 		basic_markup.attribute_str = '{"href": "'+tObj['url']+'"}'
+	if tObj['group'] != None:
+		basic_markup.markup_group_id = tObj['group']
 	session.add(basic_markup)
 
 def addPostToSession(jObj, session):
@@ -282,8 +287,8 @@ def addPostToSession(jObj, session):
 			).strftime('%Y-%m-%d %H:%M:%S')
 	if jObj['name'] not in post_dict:
 		post_dict[jObj['name']] = post_inc.inc()
-	# if the parent_id is a comment (not a link or subreddit)
 	parent_id = None
+	# t3 prefix means parent is comment, not link or subreddit
 	if jObj['parent_id'][:2] == 't3':
 		if jObj['parent_id'] not in post_dict:
 			post_dict['parent_id'] = post_inc.inc()
@@ -419,6 +424,7 @@ def matchToTagObject(match, tag, body):
 		'url': 			None,
 		'text':			None,
 		'processed':	False,
+		'group':		None,
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
@@ -489,6 +495,36 @@ def addTextToTagObjects(tObjs, body):
 	for tObj in tObjs:
 		tObj['text'] = body[tObj['start']:tObj['end']]
 	return tObjs
+
+# for lists, quotes, superscripts
+def groupTagObjects(tObjs):
+	# relies on tObjs sorted in order of start position
+	tObjs = sorted(tObjs, key=lambda k: k['start'])
+	if len(tObjs) > 0:	
+		prevObj = tObjs[0]
+		currGroup = 1
+		prevObj['group'] = currGroup
+		if len(tObjs) > 1:
+			for tObj in tObjs[1:]:
+				ps = prevObj['start']
+				pe = prevObj['end']
+				ts = tObj['start']
+				te = tObj['end']
+				# if this tag immediately proceeds the previous
+				if (pe + 1 == ts 
+				and prevObj['type'] == 'li'
+				and tObj['type'] == 'li'):
+					tObj['group'] = currGroup
+				# if this tag is nested inside the previous, or vice versa
+				elif ((pe >= te or (ps == ts))
+				and prevObj['type'] == tObj['type']
+				and (tObj['type'] == 'sup' or tObj['type'] == 'blockquote')):
+					tObj['group'] = currGroup
+				else:
+					currGroup += 1
+					tObj['group'] = currGroup
+	return tObjs
+
 
 ###################################
 # Execution starts here

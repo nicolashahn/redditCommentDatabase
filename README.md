@@ -19,11 +19,11 @@ Given MySQL login information and raw JSON Reddit comments:
 
 Strips Reddit's markdown from the text and creates a basic_markdown row for each instance of markdown. The goal is to eventually discover features indicating sarcasm. Given Reddit's r/sarcasm Subreddit, there should be a good amount of data to be gleaned from the 53 million comments in the 1 month dataset, or 1.7 billion in the entire Reddit comment dataset.
 
-The schema varies slightly from the basic IAC database. You will need to add the following:
+The schema varies slightly from the basic IAC database. The SQL script redditStructure will do the following:
 
-Add row to datasets for reddit (default dataset_id = 6, change this in the script)
+Add row to datasets for reddit (default dataset_id = 6, change reddit_id in script)
 
-'subreddits' table
+Add a 'subreddits' table
   - dataset_id: tinyInt(3) PK
   - subreddit_id: int(20) UN PK
   - subreddit_name: varchar(255)
