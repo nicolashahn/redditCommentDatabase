@@ -45,3 +45,4 @@ mdbody = convertAndClean(body)
 
 bsbody = bs(mdbody, 'html.parser')
 print(bsbody.prettify())
+print(bsbody.ul)

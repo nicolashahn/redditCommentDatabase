@@ -227,29 +227,28 @@ def addMarkupsAndTextToSession(jObj, session):
 	# don't need to add text_id in addTextObject()
 	# because always have exactly 1 text object
 	jObj['text_iac_id'] = text_inc.inc()
+	tag_inc = Incrementer()
 	body = jObj['body']
 	addedTags = True
 	# keep adding tags until all markup replaced
 	while addedTags == True:
 		body, addedTags = convertAndClean(body)
-	# tempOut.write(jObj['name']+'\n')
-	# tempOut.write("___OLD___:\n"+body+'\n\n')
-	tObjs = getAllTagObjects(body)
+	tempOut.write('\n\n'+jObj['name']+'\n')
+	tempOut.write("___OLD___:\n"+body+'\n\n')
+	tObjs = getAllTagObjects(body, tag_inc)
 	# to keep track of if we're still getting more tags
 	new_tObjs = tObjs
 	while len(new_tObjs) != 0:
-		# tempOut.write("tObjs:\n"+str(tObjs)+"\n\n")
-		orig_tObjs, body = stripAllTagsAndFixStartEnd(tObjs, body)
-		# tempOut.write("___NEW___:\n"+body+'\n\n')
-		# tempOut.write("tObjs:\n"+str(fixedTOb/js)+"\n\n\n\n")
+		orig_tObjs, body = stripTagsAndFixStartEnd(tObjs, body)
+		tempOut.write("___NEW___:\n"+body+'\n\n')
 		# try to get more tags in case we have nested quotes or some such
-		new_tObjs = getAllTagObjects(body)
+		new_tObjs = getAllTagObjects(body, tag_inc)
 		tObjs = orig_tObjs + new_tObjs
+		[tempOut.write(str(tObj)+"\n") for tObj in tObjs]
+	# [print(t) for t in tObjs]
 	tObjs = addTextToTagObjects(tObjs, body)
 	tObjs = groupTagObjects(tObjs)
 	for tObj in tObjs:
-		print(jObj['name'])
-		print(tObj['type'],tObj['group'],tObj['text'])
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
 	addTextObjectToSession(jObj, session)
@@ -272,12 +271,10 @@ def addTagObjectToSession(tObj, jObj, session):
 		start 			= tObj['start'],
 		end 			= tObj['end'],
 		type_name		= tagToType[tObj['type']],
-		# markup_group_id = Null if not part of a group
+		markup_group_id = tObj['group']
 		)
 	if tObj['url'] != None:
 		basic_markup.attribute_str = '{"href": "'+tObj['url']+'"}'
-	if tObj['group'] != None:
-		basic_markup.markup_group_id = tObj['group']
 	session.add(basic_markup)
 
 def addPostToSession(jObj, session):
@@ -406,16 +403,16 @@ def replaceSuperscriptTags(body):
 
 # in: body text (after replacing markup with tags)
 # out: list of dicts (tag objects)
-def getAllTagObjects(body):
+def getAllTagObjects(body, tag_inc):
 	tObjs = []
 	for tag in tagRe:
 		matches = re.finditer(tagRe[tag], body)
 		for m in matches:
-			tObjs.append(matchToTagObject(m, tag, body))
+			tObjs.append(matchToTagObject(m, tag, body, tag_inc))
 	return tObjs
 
 # converts re's MatchObject to a tag object
-def matchToTagObject(match, tag, body):
+def matchToTagObject(match, tag, body, tag_inc):
 	tObj = {
 		'type': 		tag,
 		'start':		match.start(),
@@ -425,6 +422,10 @@ def matchToTagObject(match, tag, body):
 		'text':			None,
 		'processed':	False,
 		'group':		None,
+		'id':			tag_inc.inc(),
+		'tagRemoved':	False,
+		# how many times it's been through the stripTags loop
+		'iteration':	0
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
@@ -432,43 +433,58 @@ def matchToTagObject(match, tag, body):
 		tObj['url'] = firstTag[9:-2]
 	return tObj
 
-# gnarly and ugly, but seems to work
-def stripAllTagsAndFixStartEnd(tObjs, body):
+# ugly, but seems to work
+def stripTagsAndFixStartEnd(tObjs, body):
 	newbody = body
 	# r = how many characters we've already removed
 	r = 0
+	# fixed = [tObj for tObj in tObjs if tObj['processed'] == True]
 	fixed = []
 	# sort by original start position
-	tObjs = sorted(tObjs, key=lambda k: k['start'])
+	# put tags NOT removed in front of tagsRemoved objects
+	tObjs = sorted([t for t in tObjs if not t['tagRemoved']], key=lambda k: k['start'])
+	fixed = sorted([t for t in tObjs if t['tagRemoved']], key=lambda k: k['start'])
+	# tObjs = newTObjs+oldTObjs
 	for i in range(len(tObjs)):
 		tObj = tObjs.pop(0)
 		if tObj['processed'] == False:
 			oldEnd = tObj['end']
 			tObj['start'] -= r
 			tObj['end'] -= r
+			for f in fixed:
+				if tObj['start'] + r ==  f['start']:
+					f['start'] -= r
 			# tempOut.write('\n\n\nITERATION '+str(i)+'\n'+tObj['type']+' '+str(tObj['start'])+' '+str(tObj['end'])+'\n')
 			# tempOut.write(newbody[tObj['start']:tObj['end']]+'\n\n\n\n')
 			# tempOut.write(newbody)
 			# if tObj['type'] != 'link':
 			# removeO, C = how many characters the opening, closing tags take
-			newbody, removeO, removeC = stripTag(tObj, newbody)
+			if tObj['tagRemoved'] == False:
+				newbody, removeO, removeC = stripTag(tObj, newbody)
+				tObj['tagRemoved'] = True
+			else:
+				removeO = 0
+				removeC = 0
 			tObj['end'] -= removeO+removeC
 			r += removeO
 			# deal with nested tags:
 			# if some tag in fixed envelopes this tObj
 			# subtract how much we just removed from its end position
 			for f in fixed:
-				if f['end'] > tObj['end']:
+				if f['end'] >= tObj['end']:
 					f['end'] -= removeO+removeC
 			# if we have nested tag later in the list
 			# add the closing tag size to offset when we subtract it later
 			for t in tObjs:
-				if t['start'] <= oldEnd:
+				if t['start'] < oldEnd:
 					t['start'] += removeC
 					t['end'] += removeC
 			r += removeC
 			tObj['processed'] = True
 			fixed.append(tObj)
+		fixed.append(tObj)
+	for tObj in fixed:
+		tObj['processed'] = False
 	return fixed, newbody
 
 # given # of chars, position the open/close tags take up, 
