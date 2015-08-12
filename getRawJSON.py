@@ -264,6 +264,8 @@ def addTextObjectToSession(jObj, session):
 	session.add(text)
 	
 def addTagObjectToSession(tObj, jObj, session):
+	if tObj['start'] > tObj['end']:
+		print("error: start index > end index for tag in post",jObj['name'])
 	basic_markup = Basic_Markup(
 		dataset_id 		= reddit_id,
 		text_id 		= jObj['text_iac_id'],
@@ -323,7 +325,7 @@ markRe = {
 	'ulist':			r'([\*\+\-] .*\n)',
 	# ordered list item
 	'olist':			r'([0-9]+\. .*\n)',
-	'superscript':		r'(\^[^\s\n\<\>\]\[\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
+	'superscript':		r'(\^[^\s\n\<\>\[\]]+)(?=[\s\n\<\>\]\[\)\(])?',
 }
 
 # same as above but for html tags instead
@@ -342,12 +344,15 @@ tagRe = {
 	'ul':				r'(\<ul\>[\s\S]+?\<\/ul\>)',
 	'ol':				r'(\<ol\>[\s\S]+?\<\/ol\>)',
 	'li':				r'(\<li\>[\s\S]+?\<\/li\>)',
-	'sup':				r'(\<sup\>[\S]+\<\/sup\>)',
+	# insert space before and after sups
+	# so that we only grab the innermost tag at each pass
+	# to avoid getting crap matches like <sup><sup>word</sup>
+	'sup':				r'(\s\<sup\>[\S]+\<\/sup\>\s)',
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 }
 
-# html tag names -> MySQL type names
+# html tag names -> MySQL type names to match IAC
 tagToType = {
 	'em':				'italic',
 	'strong':			'bold',
@@ -397,7 +402,7 @@ def replaceSuperscriptTags(body):
 	newbody = body
 	matchObjs = re.finditer(markRe['superscript'],body)
 	for obj in matchObjs:
-		newObjText = '<sup>' + obj.group()[1:] + '</sup>'
+		newObjText = ' <sup>' + obj.group()[1:] + '</sup> '
 		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
 
@@ -420,7 +425,7 @@ def matchToTagObject(match, tag, body, tag_inc):
 		# only used for link tags
 		'url': 			None,
 		'text':			None,
-		'processed':	False,
+		# 'processed':	False,
 		'group':		None,
 		'id':			tag_inc.inc(),
 		'tagRemoved':	False,
@@ -433,61 +438,9 @@ def matchToTagObject(match, tag, body, tag_inc):
 		tObj['url'] = firstTag[9:-2]
 	return tObj
 
-# ugly, but seems to work
-def _stripTagsAndFixStartEnd(tObjs, body):
-	newbody = body
-	# r = how many characters we've already removed
-	r = 0
-	# fixed = [tObj for tObj in tObjs if tObj['processed'] == True]
-	fixed = []
-	# sort by original start position
-	# put tags NOT removed in front of tagsRemoved objects
-	tObjs = sorted([t for t in tObjs if not t['tagRemoved']], key=lambda k: k['start'])
-	fixed = sorted([t for t in tObjs if t['tagRemoved']], key=lambda k: k['start'])
-	# tObjs = newTObjs+oldTObjs
-	for i in range(len(tObjs)):
-		tObj = tObjs.pop(0)
-		if tObj['processed'] == False:
-			oldEnd = tObj['end']
-			tObj['start'] -= r
-			tObj['end'] -= r
-			for f in fixed:
-				if tObj['start'] + r ==  f['start']:
-					f['start'] -= r
-			# tempOut.write('\n\n\nITERATION '+str(i)+'\n'+tObj['type']+' '+str(tObj['start'])+' '+str(tObj['end'])+'\n')
-			# tempOut.write(newbody[tObj['start']:tObj['end']]+'\n\n\n\n')
-			# tempOut.write(newbody)
-			# if tObj['type'] != 'link':
-			# rO, C = how many characters the opening, closing tags take
-			if tObj['tagRemoved'] == False:
-				newbody, rO, rC = stripTag(tObj, newbody)
-				tObj['tagRemoved'] = True
-			else:
-				rO = 0
-				rC = 0
-			tObj['end'] -= rO+rC
-			r += rO
-			# deal with nested tags:
-			# if some tag in fixed envelopes this tObj
-			# subtract how much we just removed from its end position
-			for f in fixed:
-				if f['end'] >= tObj['end']:
-					f['end'] -= rO+rC
-			# if we have nested tag later in the list
-			# add the closing tag size to offset when we subtract it later
-			for t in tObjs:
-				if t['start'] < oldEnd:
-					t['start'] += rC
-					t['end'] += rC
-			r += rC
-			tObj['processed'] = True
-			fixed.append(tObj)
-		fixed.append(tObj)
-	for tObj in fixed:
-		tObj['processed'] = False
-	return fixed, newbody
-
-# alternate for the one above, to experiment with
+# maybe the most frustrating bit of code I've written
+# takes list of tag objects, removes their tags from the body, 
+# and fixes their start,end positions to account for missing tags
 def stripTagsAndFixStartEnd(tObjs, body):
 	newbody = body
 	newTags = sorted([t for t in tObjs if not t['tagRemoved']], key=lambda k: k['start'])
@@ -545,10 +498,15 @@ def stripTag(tObj, body):
 		# size of open tag, close tag <></>
 		o = len(tObj['type'])+2
 		c = len(tObj['type'])+3
+		# because of a hack trying to get regex to parse html (I am filled with regret)
+		if tObj['type'] == 'sup':
+			o += 1
+			c += 1
 	else:
 		# link: <a href=""></a>
 		o = len(tObj['url'])+11
 		c = 4
+		
 	# remove end tag first because indices count from start of string
 	newbody = newbody[0:e-c] + newbody[e:]
 	newbody = newbody[0:s] + newbody[s+o:]
@@ -586,47 +544,6 @@ def groupTagObjects(tObjs):
 			currGroup += 1
 		grouped.append(t)
 	return grouped
-	# # relies on tObjs sorted in order of start position
-	# tObjs = sorted(tObjs, key=lambda k: k['start'])
-	# for tObj in tObjs:
-	# 	tObj['group'] = None
-	# currGroup = 1
-	# if len(tObjs) > 1:	
-	# 	for i in range(len(tObjs)-1):
-	# 		prevObj = tObjs[i]
-	# 		tObj = tObjs[i+1]
-	# 		prevObj['group'] = currGroup
-	# 		ps = prevObj['start']
-	# 		pe = prevObj['end']
-	# 		pt = prevObj['type']
-	# 		ts = tObj['start']
-	# 		te = tObj['end']
-	# 		tt = tObj['type']
-	# 		# # if this tag immediately proceeds the previous
-	# 		# if ((pe + 1 == ts and pt == 'li' and tt == 'li')
-	# 		# # or this tag is nested in prev or vice versa
-	# 		# or ((pe >= te or (ps == ts)) and ((pt == tt
-	# 		# # and its superscript or blockquote
-	# 		# and (tt == 'sup' or tt == 'blockquote')))
-	# 		# # or it's a list tag (not list item)
-	# 		# or (tt == 'li' and (pt == 'ul' or tt == 'ol')))):
-	# 		# if this tag immediately proceeds the previous
-	# 		if ((pe >= te or ps == ts) and (pt == tt
-	# 		# and its superscript or blockquote
-	# 		and (tt == 'sup' or tt == 'blockquote'))):
-	# 			tObj['group'] = currGroup
-	# 		else:
-	# 			currGroup += 1
-	# 			tObj['group'] = currGroup
-	# 		prevObj = tObj
-	# else:
-	# 	# handles case if 0 or 1 tObjs
-	# 	for tObj in tObjs:
-	# 		tObj['group'] = 1
-	# return tObjs
-
-
-
 
 ###################################
 # Execution starts here
