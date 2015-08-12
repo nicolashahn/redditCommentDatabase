@@ -1,13 +1,4 @@
-/*
-# nuke the database of any reddit material
-use iac;
-delete from posts where dataset_id = 6;
-delete from authors where dataset_id = 6;
-delete from basic_markup where dataset_id = 6;
-delete from texts where dataset_id = 6;
-delete from discussions where dataset_id = 6;
-delete from subreddits where dataset_id = 6;
-*/
+
 
 # select * from discussions;
 
@@ -18,6 +9,6 @@ delete from subreddits where dataset_id = 6;
 
 # alter table discussions add subreddit_id int(10);
 
-# alter table basic_markup drop primary key, add primary key(dataset_id, markup_id);
+# select * from texts where dataset_id = 6;
 
-select * from posts where dataset_id = 6;
+ select * from basic_markup where dataset_id = 6;

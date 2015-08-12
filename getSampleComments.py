@@ -1,13 +1,12 @@
 import json
-from 
 
 data = open("RC_2015-01","r")
 
-out = open("sampleComments","w")
+out = open("sampleComments100k","w")
 
 i = 0
 for line in data:
-	if i == 1000:
+	if i == 100000:
 		break
 	out.write(line)
 	i+=1

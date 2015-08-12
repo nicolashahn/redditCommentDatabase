@@ -119,6 +119,7 @@ def connect(username, password, database):
 	engine.connect()
 	return engine
 
+
 # create a session from the engine
 def createSession(eng):
 	Session = s.orm.sessionmaker()
@@ -265,7 +266,7 @@ def addTextObjectToSession(jObj, session):
 	
 def addTagObjectToSession(tObj, jObj, session):
 	if tObj['start'] > tObj['end']:
-		print("error: start index > end index for tag in post",jObj['name'])
+		print("error: start index > end index for tag in post",jObj['name'], tObj['id'])
 	basic_markup = Basic_Markup(
 		dataset_id 		= reddit_id,
 		text_id 		= jObj['text_iac_id'],
@@ -325,7 +326,8 @@ markRe = {
 	'ulist':			r'([\*\+\-] .*\n)',
 	# ordered list item
 	'olist':			r'([0-9]+\. .*\n)',
-	'superscript':		r'(\^[^\s\n\<\>\[\]]+)(?=[\s\n\<\>\]\[\)\(])?',
+	'supPar':			r'(\^\([^\)]*?\))',
+	'superscript':		r'(\^[^\s\<\>\[\]\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
 }
 
 # same as above but for html tags instead
@@ -334,7 +336,7 @@ tagRe = {
 	'strong':			r'(\<strong\>[\s\S]+?\<\/strong\>)',
 	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
 	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
-	'link':				r'(?i)(<a[^>]+?>.*?</a>)',
+	'link':				r'(?i)(<a[^>]+?>.+?</a>)',
 	'h1':				r'(\<h1\>[\s\S]+?\<\/h1\>)',
 	'h2':				r'(\<h2\>[\s\S]+?\<\/h2\>)',
 	'h3':				r'(\<h3\>[\s\S]+?\<\/h3\>)',
@@ -347,7 +349,8 @@ tagRe = {
 	# insert space before and after sups
 	# so that we only grab the innermost tag at each pass
 	# to avoid getting crap matches like <sup><sup>word</sup>
-	'sup':				r'(\s\<sup\>[\S]+\<\/sup\>\s)',
+	# 'sup':				r'(\s\<sup\>[\S]+\<\/sup\>\s)',
+	'sup':				r'(\s\<sup\>\([^\(\)]+\)\<\/sup\>\s)',
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 }
@@ -369,13 +372,15 @@ tagToType = {
 	'ol':				'orderedList',
 	'li':				'listItem',
 	'sup':				'superscript',
+	'supP':				'superscript',
 	'pre':				'pre',
 	'code':				'code',
 }
 
 # markdown -> html tags
 def convertAndClean(body):
-	newbody = body.replace('&gt;','>')
+	newbody = body + ""
+	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&amp;','&')
 	newbody = newbody.replace('&lt;','<')
 	newbody = replaceSuperscriptTags(newbody)
@@ -385,6 +390,7 @@ def convertAndClean(body):
 	newbody = replaceStrikethroughTags(newbody)
 	newbody = newbody.replace('<hr />', '')
 	newbody = newbody.replace('<br />', '')
+	newbody = fixEmptyLinkTags(newbody)
 	addedTags = body != newbody
 	return newbody, addedTags
 
@@ -400,11 +406,33 @@ def replaceStrikethroughTags(body):
 
 def replaceSuperscriptTags(body):
 	newbody = body
-	matchObjs = re.finditer(markRe['superscript'],body)
+	matchObjs = re.finditer(markRe['supPar'],body)
 	for obj in matchObjs:
 		newObjText = ' <sup>' + obj.group()[1:] + '</sup> '
 		newbody = newbody.replace(obj.group(),newObjText)
+	matchObjs = re.finditer(markRe['superscript'],body)
+	for obj in matchObjs:
+		newObjText = ' <sup>(' + obj.group()[1:] + ')</sup> '
+		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
+
+def fixEmptyLinkTags(body):
+	newbody = body
+	emptyLinkRe = r'(?i)(<a[^>]+?></a>)'
+	urlRe = r'\<a href\=\"(.+)\"\>'
+	matchObjs = re.finditer(emptyLinkRe,body)
+	for obj in matchObjs:
+		# <a href="/link"></a>
+		bothTags = obj.group()
+		# /link in above
+		url = re.findall(urlRe,bothTags)[0]
+		# replace bothTags with <a href="/link">/link</a>
+		newBothTags = bothTags.replace('"></a>','">'+url+'</a>')
+		# now put it back into the body
+		newbody = newbody.replace(bothTags,newBothTags)
+	return newbody
+
+
 
 # in: body text (after replacing markup with tags)
 # out: list of dicts (tag objects)
@@ -430,7 +458,8 @@ def matchToTagObject(match, tag, body, tag_inc):
 		'id':			tag_inc.inc(),
 		'tagRemoved':	False,
 		# how many times it's been through the stripTags loop
-		'generation':	0
+		'generation':	0,
+		'origText':		match.group()
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
@@ -498,10 +527,10 @@ def stripTag(tObj, body):
 		# size of open tag, close tag <></>
 		o = len(tObj['type'])+2
 		c = len(tObj['type'])+3
-		# because of a hack trying to get regex to parse html (I am filled with regret)
+		# because of parentheses, extra space (both hacks)
 		if tObj['type'] == 'sup':
-			o += 1
-			c += 1
+			o += 2
+			c += 2
 	else:
 		# link: <a href=""></a>
 		o = len(tObj['url'])+11
@@ -575,8 +604,12 @@ def main():
 	# show fields with actual example values
 	# [print(x, jObjs[8][x]) for x in sorted(jObjs[8])]
 
+	# i = 0
 	for jObj in jObjs:
 		createTableObjects(jObj,session)
+		# if i % 1000 == 0:
+		# 	session.commit()
+		# i+=1
 	session.commit()
 
 if __name__ == "__main__":
