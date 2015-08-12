@@ -241,10 +241,10 @@ def addMarkupsAndTextToSession(jObj, session):
 	while len(new_tObjs) != 0:
 		orig_tObjs, body = stripTagsAndFixStartEnd(tObjs, body)
 		tempOut.write("___NEW___:\n"+body+'\n\n')
+		[tempOut.write(str(tObj)+"\n") for tObj in sorted(tObjs, key=lambda k: k['start'])]
 		# try to get more tags in case we have nested quotes or some such
 		new_tObjs = getAllTagObjects(body, tag_inc)
 		tObjs = orig_tObjs + new_tObjs
-		[tempOut.write(str(tObj)+"\n") for tObj in tObjs]
 	# [print(t) for t in tObjs]
 	tObjs = addTextToTagObjects(tObjs, body)
 	tObjs = groupTagObjects(tObjs)
@@ -342,7 +342,7 @@ tagRe = {
 	'ul':				r'(\<ul\>[\s\S]+?\<\/ul\>)',
 	'ol':				r'(\<ol\>[\s\S]+?\<\/ol\>)',
 	'li':				r'(\<li\>[\s\S]+?\<\/li\>)',
-	'sup':				r'(\<sup\>[\s\S]+?\<\/sup\>)',
+	'sup':				r'(\<sup\>[\S]+\<\/sup\>)',
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 }
@@ -425,7 +425,7 @@ def matchToTagObject(match, tag, body, tag_inc):
 		'id':			tag_inc.inc(),
 		'tagRemoved':	False,
 		# how many times it's been through the stripTags loop
-		'iteration':	0
+		'generation':	0
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
@@ -434,7 +434,7 @@ def matchToTagObject(match, tag, body, tag_inc):
 	return tObj
 
 # ugly, but seems to work
-def stripTagsAndFixStartEnd(tObjs, body):
+def _stripTagsAndFixStartEnd(tObjs, body):
 	newbody = body
 	# r = how many characters we've already removed
 	r = 0
@@ -458,34 +458,82 @@ def stripTagsAndFixStartEnd(tObjs, body):
 			# tempOut.write(newbody[tObj['start']:tObj['end']]+'\n\n\n\n')
 			# tempOut.write(newbody)
 			# if tObj['type'] != 'link':
-			# removeO, C = how many characters the opening, closing tags take
+			# rO, C = how many characters the opening, closing tags take
 			if tObj['tagRemoved'] == False:
-				newbody, removeO, removeC = stripTag(tObj, newbody)
+				newbody, rO, rC = stripTag(tObj, newbody)
 				tObj['tagRemoved'] = True
 			else:
-				removeO = 0
-				removeC = 0
-			tObj['end'] -= removeO+removeC
-			r += removeO
+				rO = 0
+				rC = 0
+			tObj['end'] -= rO+rC
+			r += rO
 			# deal with nested tags:
 			# if some tag in fixed envelopes this tObj
 			# subtract how much we just removed from its end position
 			for f in fixed:
 				if f['end'] >= tObj['end']:
-					f['end'] -= removeO+removeC
+					f['end'] -= rO+rC
 			# if we have nested tag later in the list
 			# add the closing tag size to offset when we subtract it later
 			for t in tObjs:
 				if t['start'] < oldEnd:
-					t['start'] += removeC
-					t['end'] += removeC
-			r += removeC
+					t['start'] += rC
+					t['end'] += rC
+			r += rC
 			tObj['processed'] = True
 			fixed.append(tObj)
 		fixed.append(tObj)
 	for tObj in fixed:
 		tObj['processed'] = False
 	return fixed, newbody
+
+# alternate for the one above, to experiment with
+def stripTagsAndFixStartEnd(tObjs, body):
+	newbody = body
+	newTags = sorted([t for t in tObjs if not t['tagRemoved']], key=lambda k: k['start'])
+	oldTags = sorted([t for t in tObjs if t['tagRemoved']], key=lambda k: k['start'])
+	r = 0
+	for _ in range(len(newTags)):
+		tObj = newTags.pop(0)
+		newbody, rO, rC = stripTag(tObj, newbody)
+		tObj['tagRemoved'] = True
+		r += rO+rC
+		for old in oldTags:
+			# from a previous generation of tags
+			if old['generation'] > 0:
+				# if this old tag is nested, only remove opening tag
+				if old['start'] > tObj['start'] and old['end'] <= tObj['end']:
+					old['start'] -= rO
+					old['end'] -= rO
+				# if tObj nested in old tag
+				elif old['start'] <= tObj['start'] and old['end'] >= tObj['end']:
+					old['end'] -= rC+rO
+				# if old is strictly after tObj
+				elif old['start'] >= tObj['end']:
+					old['start'] -= rO+rC
+					old['end'] -= rO+rC
+			# if the old tag is from this generation, we know it is not nested
+			# because sorting by start means higher level tags come first
+			# therefore only end position needs modification
+			else:
+				if old['end'] >= tObj['end']:
+					old['end'] -= rO
+				if old['end'] >= tObj['start']:
+					old['end'] -= rC
+		for new in newTags:
+			# these should all be either nested inside tObj
+			# or come after, none should envelope tObj
+			if new['start'] < tObj['end']: # nested
+				new['start'] -= rO
+				new['end'] -= rO
+			else: # not nested
+				new['start'] -= rO+rC
+				new['end'] -= rO+rC
+		tObj['end'] -= (rO+rC)
+		oldTags.append(tObj)
+	for tObj in oldTags:
+		tObj['generation'] += 1
+	return oldTags, newbody
 
 # given # of chars, position the open/close tags take up, 
 # remove those chars from the body
