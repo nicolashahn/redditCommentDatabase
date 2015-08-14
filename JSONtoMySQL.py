@@ -421,12 +421,15 @@ def convertAndClean(body):
 	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&lt;','<')
 	newbody = newbody.replace('&amp;','&')
+	# old markdown parser - new one (mistune) seems to screw up less
 	# newbody = md.markdown(newbody)
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
 	newbody = replaceStrikethroughTags(newbody)
 	newbody = newbody.replace('<hr />', '')
+	newbody = newbody.replace('<hr>','')
 	newbody = newbody.replace('<br />', '')
+	newbody = newbody.replace('<br>','')
 	newbody = fixEmptyLinkTags(newbody)
 	addedTags = body != newbody
 	return newbody, addedTags
@@ -674,11 +677,11 @@ def main():
 	i = 1
 	for jObj in jObjs:
 		createTableObjects(jObj,session)
-		# if i % batch_size == 0:
-		# 	print('Committing items',i-(batch_size-1),'to',i)
-		# 	sys.stdout.flush()
-		# 	session.commit()
-		# i+=1
+		if i % batch_size == 0:
+			print('Committing items',i-(batch_size-1),'to',i)
+			sys.stdout.flush()
+			session.commit()
+		i+=1
 	session.commit()
 
 if __name__ == "__main__":
