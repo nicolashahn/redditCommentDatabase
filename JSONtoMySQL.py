@@ -16,6 +16,7 @@ from sqlalchemy.dialects import mysql
 import sys
 import re
 import markdown2 as md
+import mistune
 import datetime
 
 ###################################
@@ -72,6 +73,8 @@ def removeNonUnicode(jObj):
 		if isinstance(jObj[field],str):
 			# jObj[field] = jObj[field].decode('utf-8','ignore')
 			jObj[field] = ''.join(i for i in jObj[field] if ord(i)<256)
+			if jObj[field] == None:
+				jObj[field] = ''
 	return jObj
 
 
@@ -252,12 +255,12 @@ def addMarkupsAndTextToSession(jObj, session):
 	jObj['text_iac_id'] = text_inc.inc()
 	tag_inc = Incrementer()
 	body = jObj['body']
+	tempOut.write('\n\n'+jObj['name']+'\n')
 	tempOut.write("___ORIGINAL___:\n"+body+'\n\n')
 	addedTags = True
 	# keep adding tags until all markup replaced
 	while addedTags == True:
 		body, addedTags = convertAndClean(body)
-	tempOut.write('\n\n'+jObj['name']+'\n')
 	tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body, tag_inc)
 	# to keep track of if we're still getting more tags
@@ -344,10 +347,12 @@ def addPostToSession(jObj, session):
 markRe = {
 	# need to add \n lookbehind to most of these
 	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
+	# stuff like ****CRASH****
+	'multiAsterisk':	r'(\*{3,})[^\*]+(\*{3,})',		
+	'3underscore':		r'',
 	'bold':				r'(\*{2}[^\*]+\*{2})',
 	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
 	'quote':			r'(&gt;[^\*\n]+\n)',
-	# links are tricky, keeps grabbing spaces as well - not finished
 	'link':				r'(\[.*\]\([^\)\s]+\))',
 	'header':			r'(\#+.+\s)',
 	# unordered list item
@@ -381,6 +386,7 @@ tagRe = {
 	'sup':				r'(\s\<sup\>\([^\(\)]+\)\<\/sup\>\s)',
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
+	'asterisks':		r'(\<asterisks\>[\s\S]+?\<\/asterisks\>)',
 }
 
 # html tag names -> MySQL type names (to match IAC)
@@ -403,16 +409,19 @@ tagToType = {
 	'supP':				'superscript',
 	'pre':				'pre',
 	'code':				'code',
+	'asterisks':		'multipleAsterisks',
 }
 
 # markdown -> html tags
 def convertAndClean(body):
 	newbody = body + ""
-	newbody = newbody.replace('&gt;','>')
-	newbody = newbody.replace('&amp;','&')
-	newbody = newbody.replace('&lt;','<')
+	newbody = replaceMultiAsterisk(newbody)
 	newbody = replaceSuperscriptTags(newbody)
-	newbody = md.markdown(newbody)
+	newbody = mistune.markdown(newbody)
+	newbody = newbody.replace('&gt;','>')
+	newbody = newbody.replace('&lt;','<')
+	newbody = newbody.replace('&amp;','&')
+	# newbody = md.markdown(newbody)
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
 	newbody = replaceStrikethroughTags(newbody)
@@ -434,13 +443,24 @@ def replaceStrikethroughTags(body):
 
 def replaceSuperscriptTags(body):
 	newbody = body
+	# example: ^hey
 	matchObjs = re.finditer(markRe['supPar'],body)
 	for obj in matchObjs:
 		newObjText = ' <sup>' + obj.group()[1:] + '</sup> '
 		newbody = newbody.replace(obj.group(),newObjText)
+	# example: ^(hey you)
 	matchObjs = re.finditer(markRe['superscript'],body)
 	for obj in matchObjs:
 		newObjText = ' <sup>(' + obj.group()[1:] + ')</sup> '
+		newbody = newbody.replace(obj.group(),newObjText)
+	return newbody
+
+def replaceMultiAsterisk(body):
+	newbody = body
+	matchObjs = re.finditer(markRe['multiAsterisk'],body)
+	for obj in matchObjs:
+		asterisksRemoved = obj.group().replace('*','')
+		newObjText = '<asterisks>' + asterisksRemoved + '</asterisks>'
 		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
 
@@ -654,11 +674,11 @@ def main():
 	i = 1
 	for jObj in jObjs:
 		createTableObjects(jObj,session)
-		if i % batch_size == 0:
-			print('Committing items',i-(batch_size-1),'to',i)
-			sys.stdout.flush()
-			session.commit()
-		i+=1
+		# if i % batch_size == 0:
+		# 	print('Committing items',i-(batch_size-1),'to',i)
+		# 	sys.stdout.flush()
+		# 	session.commit()
+		# i+=1
 	session.commit()
 
 if __name__ == "__main__":
