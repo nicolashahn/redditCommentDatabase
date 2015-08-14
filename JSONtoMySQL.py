@@ -6,6 +6,8 @@
 # output: MySQL insertions for each object according to schema
 # the 1 month dataset has 53,851,542 comments total
 
+# -*- coding: utf-8 -*-
+
 import json
 import sqlalchemy as s
 from sqlalchemy.ext.declarative import declarative_base
@@ -23,6 +25,15 @@ import datetime
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
 
+# which comment # we're currently on in the data file/how many lines we've loaded
+comment_index = 1
+
+# number of total lines in data file
+total_lines = 0
+
+# how many objects to push to server at a time
+batch_size = 1000
+
 # {native_id: db_id}
 # so we don't have to query to check if link/subreddit obj already exists
 link_dict = {}
@@ -32,7 +43,7 @@ post_dict = {}
 
 # temporary output file for checking things 
 # (print statements choke on unicode)
-tempOut = open('tempOut','w', encoding='utf8')
+tempOut = open('tempOut','w', encoding='utf-8')
 
 
 ###################################
@@ -41,16 +52,27 @@ tempOut = open('tempOut','w', encoding='utf8')
 
 # json text dump -> list of json-dicts
 # also encodes the line number the object in the raw file
-def jsonDataToDict(data):
+def jsonDataToDict(data, comment_index):
 	jObjs = []
-	i = 0
 	for line in data:
-		i += 1
-		jline = json.loads(line)
-		jline['line_no'] = i
-		jObjs.append(jline)
-		# print([x+": "+str(jline[x]) for x in sorted(jline)])
+		jObj = json.loads(line)
+		jObj['line_no'] = comment_index
+		jObj = removeNonUnicode(jObj)
+		jObjs.append(jObj)
+		comment_index += 1
+		if comment_index % 10000 == 0:
+			print("loaded",comment_index,"objects")
+			sys.stdout.flush()
 	return jObjs
+
+# occasionally a char will not be in UTF8,
+# this makes sure that all are
+def removeNonUnicode(jObj):
+	for field in jObj:
+		if isinstance(jObj[field],str):
+			# jObj[field] = jObj[field].decode('utf-8','ignore')
+			jObj[field] = ''.join(i for i in jObj[field] if ord(i)<256)
+	return jObj
 
 
 # ALL JSON FIELDS IN AN OBJECT
@@ -115,7 +137,7 @@ class Incrementer():
 # then return engine object
 def connect(username, password, database):
 	db_uri = 'mysql://{}:{}@{}'.format(username, password, database)
-	engine = s.create_engine(db_uri)
+	engine = s.create_engine(db_uri, encoding='utf-8')
 	engine.connect()
 	return engine
 
@@ -230,19 +252,20 @@ def addMarkupsAndTextToSession(jObj, session):
 	jObj['text_iac_id'] = text_inc.inc()
 	tag_inc = Incrementer()
 	body = jObj['body']
+	tempOut.write("___ORIGINAL___:\n"+body+'\n\n')
 	addedTags = True
 	# keep adding tags until all markup replaced
 	while addedTags == True:
 		body, addedTags = convertAndClean(body)
 	tempOut.write('\n\n'+jObj['name']+'\n')
-	tempOut.write("___OLD___:\n"+body+'\n\n')
+	tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body, tag_inc)
 	# to keep track of if we're still getting more tags
 	new_tObjs = tObjs
 	while len(new_tObjs) != 0:
 		orig_tObjs, body = stripTagsAndFixStartEnd(tObjs, body)
-		tempOut.write("___NEW___:\n"+body+'\n\n')
-		[tempOut.write(str(tObj)+"\n") for tObj in sorted(tObjs, key=lambda k: k['start'])]
+		# tempOut.write("___NEW___:\n"+body+'\n\n')
+		# [tempOut.write(str(tObj)+"\n") for tObj in sorted(tObjs, key=lambda k: k['start'])]
 		# try to get more tags in case we have nested quotes or some such
 		new_tObjs = getAllTagObjects(body, tag_inc)
 		tObjs = orig_tObjs + new_tObjs
@@ -252,6 +275,7 @@ def addMarkupsAndTextToSession(jObj, session):
 	for tObj in tObjs:
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
+	tempOut.write("___TAGS_REMOVED___:\n"+body+'\n\n')
 	addTextObjectToSession(jObj, session)
 
 def addTextObjectToSession(jObj, session):
@@ -266,19 +290,23 @@ def addTextObjectToSession(jObj, session):
 	
 def addTagObjectToSession(tObj, jObj, session):
 	if tObj['start'] > tObj['end']:
-		print("error: start index > end index for tag in post",jObj['name'], tObj['id'])
-	basic_markup = Basic_Markup(
-		dataset_id 		= reddit_id,
-		text_id 		= jObj['text_iac_id'],
-		# markup_id auto increments by itself in MySQL server
-		start 			= tObj['start'],
-		end 			= tObj['end'],
-		type_name		= tagToType[tObj['type']],
-		markup_group_id = tObj['group']
-		)
-	if tObj['url'] != None:
-		basic_markup.attribute_str = '{"href": "'+tObj['url']+'"}'
-	session.add(basic_markup)
+		print("warning: start index > end index for tag in post",jObj['name'],"with tag id",tObj['id'])
+	if tObj['start'] < 0:
+		print("warning: start index < 0 for tag in post",jObj['name'],"with tag id",tObj['id'])
+	# this is a hack
+	if tObj['end'] >= 0 and tObj['start'] >= 0:	
+		basic_markup = Basic_Markup(
+			dataset_id 		= reddit_id,
+			text_id 		= jObj['text_iac_id'],
+			# markup_id auto increments by itself in MySQL server
+			start 			= tObj['start'],
+			end 			= tObj['end'],
+			type_name		= tagToType[tObj['type']],
+			markup_group_id = tObj['group']
+			)
+		if tObj['url'] != None:
+			basic_markup.attribute_str = '{"href": "'+tObj['url']+'"}'
+		session.add(basic_markup)
 
 def addPostToSession(jObj, session):
 	ts = datetime.datetime.fromtimestamp(
@@ -355,7 +383,7 @@ tagRe = {
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 }
 
-# html tag names -> MySQL type names to match IAC
+# html tag names -> MySQL type names (to match IAC)
 tagToType = {
 	'em':				'italic',
 	'strong':			'bold',
@@ -416,6 +444,9 @@ def replaceSuperscriptTags(body):
 		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
 
+# sometimes get stuff like '<a href="/subreddit"></a>'
+# has nothing inside the tags, but shows up as '/subreddit'
+# this adds the link to the inner content of the tags
 def fixEmptyLinkTags(body):
 	newbody = body
 	emptyLinkRe = r'(?i)(<a[^>]+?></a>)'
@@ -480,6 +511,8 @@ def stripTagsAndFixStartEnd(tObjs, body):
 		newbody, rO, rC = stripTag(tObj, newbody)
 		tObj['tagRemoved'] = True
 		r += rO+rC
+		# tempOut.write("text: "+tObj['origText']+"\n open size: "+str(rO)+" closedsize: "+str(rC))
+		# tempOut.write(" orig start: "+str(tObj['start'])+" orig end: "+str(tObj['end'])+"\n")
 		for old in oldTags:
 			# from a previous generation of tags
 			if old['generation'] > 0:
@@ -500,7 +533,7 @@ def stripTagsAndFixStartEnd(tObjs, body):
 			else:
 				if old['end'] >= tObj['end']:
 					old['end'] -= rO
-				if old['end'] >= tObj['start']:
+				if old['end'] > tObj['start']:
 					old['end'] -= rC
 		for new in newTags:
 			# these should all be either nested inside tObj
@@ -512,6 +545,7 @@ def stripTagsAndFixStartEnd(tObjs, body):
 				new['start'] -= rO+rC
 				new['end'] -= rO+rC
 		tObj['end'] -= (rO+rC)
+		# tempOut.write(" fixed end: "+str(tObj['end'])+" text length: "+str(tObj['end']-tObj['start'])+"\n")
 		oldTags.append(tObj)
 	for tObj in oldTags:
 		tObj['generation'] += 1
@@ -574,6 +608,7 @@ def groupTagObjects(tObjs):
 		grouped.append(t)
 	return grouped
 
+
 ###################################
 # Execution starts here
 ###################################
@@ -588,11 +623,23 @@ def main():
 
 	user = sys.argv[1]
 	pword = sys.argv[2]
-	data = sys.argv[3]
+	dataFile = sys.argv[3]
 	db = sys.argv[4]
-	
-	data = open(data,'r', encoding='utf8')
-	jObjs = jsonDataToDict(data)
+
+	print('Loading data from',dataFile)
+	data = open(dataFile,'r', encoding='utf-8')
+
+	# get total lines
+	for i,l in enumerate(data):
+		pass
+	total_lines = i+1
+	print('Total lines in file:',total_lines)
+	sys.stdout.flush()
+
+	data = open(dataFile,'r', encoding='utf-8')
+	jObjs = jsonDataToDict(data, comment_index)
+
+	print('Connecting to database',db,'as user',user)
 	eng = connect(user, pword, db)
 	metadata = s.MetaData(bind=eng)
 	session = createSession(eng)
@@ -604,12 +651,14 @@ def main():
 	# show fields with actual example values
 	# [print(x, jObjs[8][x]) for x in sorted(jObjs[8])]
 
-	# i = 0
+	i = 1
 	for jObj in jObjs:
 		createTableObjects(jObj,session)
-		# if i % 1000 == 0:
-		# 	session.commit()
-		# i+=1
+		if i % batch_size == 0:
+			print('Committing items',i-(batch_size-1),'to',i)
+			sys.stdout.flush()
+			session.commit()
+		i+=1
 	session.commit()
 
 if __name__ == "__main__":
