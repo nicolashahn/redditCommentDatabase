@@ -431,6 +431,7 @@ def convertAndClean(body):
 	newbody = newbody.replace('<br />', '')
 	newbody = newbody.replace('<br>','')
 	newbody = fixEmptyLinkTags(newbody)
+	newbody = fixFalseEmTags(newbody)
 	addedTags = body != newbody
 	return newbody, addedTags
 
@@ -484,6 +485,20 @@ def fixEmptyLinkTags(body):
 		newBothTags = bothTags.replace('"></a>','">'+url+'</a>')
 		# now put it back into the body
 		newbody = newbody.replace(bothTags,newBothTags)
+	return newbody
+
+# extreme corner case:
+# ....blah blah blah!*
+# ^*blah ^blah ^blah
+# this is not an italic, but mistune, markdown2 think it is
+def fixFalseEmTags(body):
+	falseEmRe = r'(\<em\>(?:[^<]*?(?!</em>)\n+)[\s\S]*?\<\/em\>)'
+	newbody = body
+	matchObjs = re.finditer(falseEmRe,body)
+	for obj in matchObjs:
+		newObjText = obj.group().replace('<em>','')
+		newObjText = obj.group().replace('</em>','')
+		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
 
 
@@ -636,18 +651,13 @@ def groupTagObjects(tObjs):
 # Execution starts here
 ###################################
 
-def main():
+def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4]):
 
-	if len(sys.argv) != 5:
-		print("Incorrect number of arguments given")
-		print("Usage: python getRawJSON [username] [password] [JSON data file] [host/database name]")
-		print("Example: python getRawJSON root password sampleComments localhost/iac")
-		sys.exit(1)
-
-	user = sys.argv[1]
-	pword = sys.argv[2]
-	dataFile = sys.argv[3]
-	db = sys.argv[4]
+	# if len(sys.argv) != 5:
+	# 	print("Incorrect number of arguments given")
+	# 	print("Usage: python getRawJSON [username] [password] [host/database name] [JSON data file]")
+	# 	print("Example: python getRawJSON root password localhost/iac sampleComments")
+	# 	sys.exit(1)
 
 	print('Loading data from',dataFile)
 	data = open(dataFile,'r', encoding='utf-8')
