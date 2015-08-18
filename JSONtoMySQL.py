@@ -261,7 +261,7 @@ def addMarkupsAndTextToSession(jObj, session):
 	# keep adding tags until all markup replaced
 	while addedTags == True:
 		body, addedTags = convertAndClean(body)
-	tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
+	# tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body, tag_inc)
 	# to keep track of if we're still getting more tags
 	new_tObjs = tObjs
@@ -349,7 +349,7 @@ markRe = {
 	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
 	# stuff like ****CRASH****
 	'multiAsterisk':	r'(\*{3,})[^\*]+(\*{3,})',		
-	'3underscore':		r'',
+	# '3underscore':		r'',
 	'bold':				r'(\*{2}[^\*]+\*{2})',
 	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
 	'quote':			r'(&gt;[^\*\n]+\n)',
@@ -387,6 +387,7 @@ tagRe = {
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 	'asterisks':		r'(\<asterisks\>[\s\S]+?\<\/asterisks\>)',
+	'del':				r'(\<del\>[\s\S]+?\<\/del\>)',
 }
 
 # html tag names -> MySQL type names (to match IAC)
@@ -410,6 +411,7 @@ tagToType = {
 	'pre':				'pre',
 	'code':				'code',
 	'asterisks':		'multipleAsterisks',
+	'del':				'deleted',
 }
 
 # markdown -> html tags
@@ -417,6 +419,8 @@ def convertAndClean(body):
 	newbody = body + ""
 	newbody = replaceMultiAsterisk(newbody)
 	newbody = replaceSuperscriptTags(newbody)
+	# fix this
+	newbody = addSupSpace(newbody)
 	newbody = mistune.markdown(newbody)
 	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&lt;','<')
@@ -432,6 +436,7 @@ def convertAndClean(body):
 	newbody = newbody.replace('<br>','')
 	newbody = fixEmptyLinkTags(newbody)
 	newbody = fixFalseEmTags(newbody)
+	# to check if we actually changed anything
 	addedTags = body != newbody
 	return newbody, addedTags
 
@@ -459,6 +464,21 @@ def replaceSuperscriptTags(body):
 		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
 
+# sometimes the space in front of the <sup> gets removed
+# add it back if missing
+def addSupSpace(body):
+	newbody = body
+	noSpaceSupRe = r'(?<![\s\n])(\<sup\>)'
+	matchObjs = re.finditer(noSpaceSupRe,body)
+	spaceAdded = ' <sup>'
+	for obj in matchObjs:
+		print(obj)
+		newbody = newbody[:obj.start()]+spaceAdded+newbody[obj.end():]
+		# newbody = newbody.replace(obj.group(), spaceAdded)
+	print('body:',newbody)
+	return newbody
+
+# ***blah*** messes up bold, italic tags
 def replaceMultiAsterisk(body):
 	newbody = body
 	matchObjs = re.finditer(markRe['multiAsterisk'],body)
@@ -692,6 +712,9 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 			sys.stdout.flush()
 			session.commit()
 		i+=1
+		if i > 50000:
+			session.commit()
+			exit()
 	session.commit()
 
 if __name__ == "__main__":
