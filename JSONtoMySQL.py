@@ -17,6 +17,7 @@ import sys
 import re
 import markdown2 as md
 import mistune
+import snudown
 import datetime
 
 ###################################
@@ -34,6 +35,9 @@ total_lines = 0
 
 # how many objects to push to server at a time
 batch_size = 1000
+
+# reuse parser for faster results
+markdown = snudown.markdown()
 
 # {native_id: db_id}
 # so we don't have to query to check if link/subreddit obj already exists
@@ -62,7 +66,7 @@ def jsonDataToDict(data, comment_index):
 		jObjs.append(jObj)
 		comment_index += 1
 		if comment_index % 10000 == 0:
-			print("loaded",comment_index,"objects")
+			print("loaded",comment_index,"comments")
 			sys.stdout.flush()
 	return jObjs
 
@@ -259,8 +263,12 @@ def addMarkupsAndTextToSession(jObj, session):
 	tempOut.write("___ORIGINAL___:\n"+body+'\n\n')
 	addedTags = True
 	# keep adding tags until all markup replaced
-	while addedTags == True:
-		body, addedTags = convertAndClean(body)
+	# while addedTags == True:
+	body, addedTags = convertAndClean(body)
+	body = addSupSpace(body)
+	# if len(body) > 0:
+	# 	if body[0] != ' ':
+	# 		body = ' '+body
 	# tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body, tag_inc)
 	# to keep track of if we're still getting more tags
@@ -369,7 +377,7 @@ tagRe = {
 	'strong':			r'(\<strong\>[\s\S]+?\<\/strong\>)',
 	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
 	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
-	'link':				r'(?i)(<a[^>]+?>.+?</a>)',
+	'link':				r'(?i)(<a[^>]+?>[\s\S]+?</a>)',
 	'h1':				r'(\<h1\>[\s\S]+?\<\/h1\>)',
 	'h2':				r'(\<h2\>[\s\S]+?\<\/h2\>)',
 	'h3':				r'(\<h3\>[\s\S]+?\<\/h3\>)',
@@ -388,6 +396,13 @@ tagRe = {
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 	'asterisks':		r'(\<asterisks\>[\s\S]+?\<\/asterisks\>)',
 	'del':				r'(\<del\>[\s\S]+?\<\/del\>)',
+	'table':			r'(\<table\>[\s\S]+?\<\/table\>)',
+	'thead':			r'(\<thead\>[\s\S]+?\<\/thead\>)',
+	'tbody':			r'(\<tbody\>[\s\S]+?\<\/tbody\>)',
+	'tr':				r'(\<tr\>[\s\S]+?\<\/tr\>)',
+	'td':				r'(?i)(<td[^>]*?>.*?</td>)',
+	'th':				r'(?i)(<th[^>]*?>.*?</th>)',
+
 }
 
 # html tag names -> MySQL type names (to match IAC)
@@ -410,18 +425,35 @@ tagToType = {
 	'supP':				'superscript',
 	'pre':				'pre',
 	'code':				'code',
-	'asterisks':		'multipleAsterisks',
+	'asterisks':		'boldAndItalic',
 	'del':				'deleted',
+	'table':			'table',
+	'thead':			'tableHead',
+	'tbody':			'tableBody',
+	'th':				'tableHeadCell',
+	'tr':				'tableRow',
+	'td':				'tableCell',
 }
 
 # markdown -> html tags
 def convertAndClean(body):
 	newbody = body + ""
-	newbody = replaceMultiAsterisk(newbody)
-	newbody = replaceSuperscriptTags(newbody)
+	# newbody = replaceSingleAsterisk(newbody)
+	# newbody = replaceMultiAsterisk(newbody)
 	# fix this
-	newbody = addSupSpace(newbody)
-	newbody = mistune.markdown(newbody)
+	# newbody = addSupSpace(newbody)
+	# tempbody = ''
+	# while tempbody != newbody:
+	# 	tempbody = newbody
+	# 	newbody = replaceSuperscriptTags(tempbody)
+	# 	newbody = addSupSpace(newbody)
+	# newbody = markdown(newbody)
+	# tempbody = ''
+	# while tempbody != newbody:
+	# 	tempbody = newbody
+	# 	newbody = replaceSuperscriptTags(tempbody)
+	# 	newbody = addSupSpace(newbody)
+	newbody = markdown(newbody)
 	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&lt;','<')
 	newbody = newbody.replace('&amp;','&')
@@ -429,7 +461,7 @@ def convertAndClean(body):
 	# newbody = md.markdown(newbody)
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
-	newbody = replaceStrikethroughTags(newbody)
+	# newbody = replaceStrikethroughTags(newbody)
 	newbody = newbody.replace('<hr />', '')
 	newbody = newbody.replace('<hr>','')
 	newbody = newbody.replace('<br />', '')
@@ -440,28 +472,34 @@ def convertAndClean(body):
 	addedTags = body != newbody
 	return newbody, addedTags
 
-# markdown2 replaces all Reddit markdown except strikethrough, superscript
-# so do it here manually
-def replaceStrikethroughTags(body):
-	newbody = body
-	matchObjs = re.finditer(markRe['strikethrough'],body)
-	for obj in matchObjs:
-		newObjText = '<strike>' + obj.group()[2:-2] + '</strike>'
-		newbody = newbody.replace(obj.group(), newObjText)
-	return newbody
+# def replaceSingleAsterisk(body):
+# 	newbody = body 
+# 	matchObjs = re.finditer(r'(?<!\s)(\*)(?=\s)',body)
+
+# def replaceStrikethroughTags(body):
+# 	newbody = body
+# 	matchObjs = re.finditer(markRe['strikethrough'],body)
+# 	for obj in matchObjs:
+# 		newObjText = '<strike>' + obj.group()[2:-2] + '</strike>'
+# 		newbody = newbody.replace(obj.group(), newObjText)
+# 	return newbody
 
 def replaceSuperscriptTags(body):
 	newbody = body
 	# example: ^hey
 	matchObjs = re.finditer(markRe['supPar'],body)
 	for obj in matchObjs:
+		# print(obj)
 		newObjText = ' <sup>' + obj.group()[1:] + '</sup> '
 		newbody = newbody.replace(obj.group(),newObjText)
+		# print(newbody)
 	# example: ^(hey you)
 	matchObjs = re.finditer(markRe['superscript'],body)
 	for obj in matchObjs:
+		# print(obj)
 		newObjText = ' <sup>(' + obj.group()[1:] + ')</sup> '
 		newbody = newbody.replace(obj.group(),newObjText)
+		# print(newbody)
 	return newbody
 
 # sometimes the space in front of the <sup> gets removed
@@ -470,12 +508,10 @@ def addSupSpace(body):
 	newbody = body
 	noSpaceSupRe = r'(?<![\s\n])(\<sup\>)'
 	matchObjs = re.finditer(noSpaceSupRe,body)
-	spaceAdded = ' <sup>'
 	for obj in matchObjs:
-		print(obj)
-		newbody = newbody[:obj.start()]+spaceAdded+newbody[obj.end():]
-		# newbody = newbody.replace(obj.group(), spaceAdded)
-	print('body:',newbody)
+		# print('before adding space:',newbody)
+		newbody = newbody[:obj.start()]+' '+'<sup>'+newbody[obj.end():]
+		# print('after adding space:',newbody)
 	return newbody
 
 # ***blah*** messes up bold, italic tags
@@ -485,7 +521,7 @@ def replaceMultiAsterisk(body):
 	for obj in matchObjs:
 		asterisksRemoved = obj.group().replace('*','')
 		newObjText = '<asterisks>' + asterisksRemoved + '</asterisks>'
-		newbody = newbody.replace(obj.group(),newObjText)
+		newbody = newbody[:obj.start()]+newObjText+newbody[obj.end():]
 	return newbody
 
 # sometimes get stuff like '<a href="/subreddit"></a>'
@@ -521,8 +557,6 @@ def fixFalseEmTags(body):
 		newbody = newbody.replace(obj.group(),newObjText)
 	return newbody
 
-
-
 # in: body text (after replacing markup with tags)
 # out: list of dicts (tag objects)
 def getAllTagObjects(body, tag_inc):
@@ -548,12 +582,25 @@ def matchToTagObject(match, tag, body, tag_inc):
 		'tagRemoved':	False,
 		# how many times it's been through the stripTags loop
 		'generation':	0,
-		'origText':		match.group()
+		'origText':		match.group(),
+		'style': 		None,
 	}
 	if tag == 'link':
 		tagText = body[tObj['start']:tObj['end']]
 		firstTag = re.findall(r'(?i)(<a[^>]+>)', tagText)[0]
 		tObj['url'] = firstTag[9:-2]
+	if tag == 'td':
+		tagText = body[tObj['start']:tObj['end']]
+		match = re.findall(r'(?i)(<td[^>]+>)', tagText)
+		if len(match) > 0:
+			firstTag = match[0]
+			tObj['style'] = firstTag[11:-2]
+	if tag == 'th':
+		tagText = body[tObj['start']:tObj['end']]
+		match = re.findall(r'(?i)(<th[^>]+>)', tagText)
+		if len(match) > 0:
+			firstTag = match[0]
+			tObj['style'] = firstTag[11:-2]
 	return tObj
 
 # maybe the most frustrating bit of code I've written
@@ -615,18 +662,21 @@ def stripTag(tObj, body):
 	newbody = body
 	s = tObj['start']
 	e = tObj['end']
-	if tObj['type'] != 'link':
-		# size of open tag, close tag <></>
-		o = len(tObj['type'])+2
-		c = len(tObj['type'])+3
-		# because of parentheses, extra space (both hacks)
-		if tObj['type'] == 'sup':
-			o += 2
-			c += 2
-	else:
+	# size of open tag, close tag <></>
+	o = len(tObj['type'])+2
+	c = len(tObj['type'])+3
+	if tObj['type'] == 'link':
 		# link: <a href=""></a>
 		o = len(tObj['url'])+11
 		c = 4
+	elif tObj['type'] == 'td' or tObj['type'] == 'th':
+		if tObj['style'] != None:
+			o = len(tObj['style'])+13
+			c = 5
+	# because of parentheses, extra space (both hacks)
+	elif tObj['type'] == 'sup':
+		o += 2
+		c += 2
 		
 	# remove end tag first because indices count from start of string
 	newbody = newbody[0:e-c] + newbody[e:]
@@ -661,6 +711,12 @@ def groupTagObjects(tObjs):
 					if (i['start'] >= t['start']
 					and i['end'] <= t['end']
 					and i['type'] == t['type']):
+						i['group'] = t['group']
+			elif t['type'] == 'table':
+				for i in tObjs:
+					if (i['start'] >= t['start']
+					and i['end'] <= t['end']
+					and i['type'] in ['thead', 'th', 'tbody', 'tr', 'td']):
 						i['group'] = t['group']
 			currGroup += 1
 		grouped.append(t)
@@ -712,9 +768,9 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 			sys.stdout.flush()
 			session.commit()
 		i+=1
-		if i > 50000:
-			session.commit()
-			exit()
+		# if i > 50000:
+		# 	session.commit()
+		# 	exit()
 	session.commit()
 
 if __name__ == "__main__":
