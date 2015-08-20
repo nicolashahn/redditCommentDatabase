@@ -27,21 +27,12 @@ import datetime
 # because 1-5 appear to be taken in IAC
 reddit_id = 6
 
-# which comment # we're currently on in the data file/how many lines we've loaded
-comment_index = 1
-
-# number of total lines in data file
-total_lines = 0
-
 # how many objects to push to server at a time
 batch_size = 1000
 
 # reuse parser for faster results
 # markdown = mistune.Markdown()
 markdown = snudown.markdown
-
-# how many comments already in the db (for id purposes)
-numExistingComments = 0
 
 # {native_id: db_id}
 # so we don't have to query to check if link/subreddit obj already exists
@@ -61,18 +52,10 @@ tempOut = open('tempOut','w', encoding='utf-8')
 
 # json text dump -> list of json-dicts
 # also encodes the line number the object in the raw file
-def jsonDataToDict(data, comment_index):
-	jObjs = []
-	for line in data:
-		jObj = json.loads(line)
-		jObj['line_no'] = comment_index
-		jObj = removeNonUnicode(jObj)
-		jObjs.append(jObj)
-		comment_index += 1
-		if comment_index % 10000 == 0:
-			print("loaded",comment_index,"comments")
-			sys.stdout.flush()
-	return jObjs
+def jsonLineToDict(line):
+	jObj = json.loads(line)
+	jObj = removeNonUnicode(jObj)
+	return jObj
 
 # occasionally a char will not be in UTF8,
 # this makes sure that all are
@@ -134,15 +117,11 @@ def removeNonUnicode(jObj):
 # each table class gets one
 class Incrementer():
 	def __init__(self):
-		# so that we can start with the correct id numbers for each script iteration
-		self.i = numExistingComments
+		self.i = 0
 
 	def inc(self):
 		self.i += 1
 		return self.i
-
-	# def reset(self):
-	# 	self.i = numExistingComments
 
 # open connection to database
 # then return engine object
@@ -263,8 +242,8 @@ def addMarkupsAndTextToSession(jObj, session):
 	jObj['text_iac_id'] = text_inc.inc()
 	tag_inc = Incrementer()
 	body = jObj['body']
-	tempOut.write('\n\n'+jObj['name']+'\n')
-	tempOut.write("___ORIGINAL___:\n"+body+'\n\n')
+	# tempOut.write('\n\n'+jObj['name']+'\n')
+	# tempOut.write("___ORIGINAL___:\n"+body+'\n\n')
 	body, addedTags = convertAndClean(body)
 	# tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body, tag_inc)
@@ -283,7 +262,7 @@ def addMarkupsAndTextToSession(jObj, session):
 	for tObj in tObjs:
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
-	tempOut.write("___TAGS_REMOVED___:\n"+body+'\n\n')
+	# tempOut.write("___TAGS_REMOVED___:\n"+body+'\n\n')
 	addTextObjectToSession(jObj, session)
 
 def addTextObjectToSession(jObj, session):
@@ -670,45 +649,26 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 	# 	print("Example: python getRawJSON root password localhost/iac sampleComments")
 	# 	sys.exit(1)
 
-	print('Loading data from',dataFile)
-	data = open(dataFile,'r', encoding='utf-8')
-
-	# get total lines
-	for i,l in enumerate(data):
-		pass
-	total_lines = i+1
-	print('Total lines in file:',total_lines)
-	sys.stdout.flush()
-
-	# datafilename-4 -> 4*500000 = 2000000
-	numExistingComments = int(dataFile.split('-')[1])*total_lines
-
-	data = open(dataFile,'r', encoding='utf-8')
-	jObjs = jsonDataToDict(data, comment_index)
-
 	print('Connecting to database',db,'as user',user)
 	eng = connect(user, pword, db)
 	metadata = s.MetaData(bind=eng)
 	session = createSession(eng)
 	generateTableClasses(eng)
-
-	# show all fields + types
-	# [print(x, jObjs[8][x].__class__) for x in sorted(jObjs[8])]
-
-	# show fields with actual example values
-	# [print(x, jObjs[8][x]) for x in sorted(jObjs[8])]
-
-	i = 1
-	for jObj in jObjs:
-		createTableObjects(jObj,session)
-		if i % batch_size == 0:
-			print('Committing items',i-(batch_size-1),'to',i)
-			sys.stdout.flush()
-			session.commit()
-		i+=1
-		# if i > 50000:
-		# 	session.commit()
-		# 	exit()
+	print('Loading data from',dataFile)
+	with open(dataFile,'r', encoding='utf-8') as data:
+		jObjs = []
+		comment_index = 1
+		for line in data:
+			jObj = jsonLineToDict(line)
+			jObjs.append(jObj)
+			if len(jObjs) >= batch_size:
+				for jObj in jObjs:
+					createTableObjects(jObj,session)
+				print("Pushing comments up to",comment_index)
+				sys.stdout.flush()
+				session.commit()
+				jObjs = []
+			comment_index += 1
 	session.commit()
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-
+# insert into datasets (dataset_id = 6,name = 'reddit', source_url = 'http://www.reddit.com',' description = 'link and image board');
 
 # select * from discussions;
 
@@ -11,4 +11,6 @@
 
 # select * from texts where dataset_id = 6;
 
- select * from basic_markup where dataset_id = 6;
+ # select * from posts where dataset_id = 6 and post_id > 140350;
+ 
+ select * from subreddits where subreddit_name = 'notsarcastic';
