@@ -37,7 +37,11 @@ total_lines = 0
 batch_size = 1000
 
 # reuse parser for faster results
-markdown = snudown.markdown()
+# markdown = mistune.Markdown()
+markdown = snudown.markdown
+
+# how many comments already in the db (for id purposes)
+numExistingComments = 0
 
 # {native_id: db_id}
 # so we don't have to query to check if link/subreddit obj already exists
@@ -130,8 +134,8 @@ def removeNonUnicode(jObj):
 # each table class gets one
 class Incrementer():
 	def __init__(self):
-		# 0 so that inc() returns 1 the first time
-		self.i = 0
+		# so that we can start with the correct id numbers for each script iteration
+		self.i = numExistingComments
 
 	def inc(self):
 		self.i += 1
@@ -265,7 +269,7 @@ def addMarkupsAndTextToSession(jObj, session):
 	# keep adding tags until all markup replaced
 	# while addedTags == True:
 	body, addedTags = convertAndClean(body)
-	body = addSupSpace(body)
+	# body = addSupSpace(body)
 	# if len(body) > 0:
 	# 	if body[0] != ' ':
 	# 		body = ' '+body
@@ -356,7 +360,7 @@ markRe = {
 	# need to add \n lookbehind to most of these
 	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
 	# stuff like ****CRASH****
-	'multiAsterisk':	r'(\*{3,})[^\*]+(\*{3,})',		
+	'multiAsterisk':	r'(\*{3,}[^\*]+\*{3,})',		
 	# '3underscore':		r'',
 	'bold':				r'(\*{2}[^\*]+\*{2})',
 	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
@@ -368,7 +372,7 @@ markRe = {
 	# ordered list item
 	'olist':			r'([0-9]+\. .*\n)',
 	'supPar':			r'(\^\([^\)]*?\))',
-	'superscript':		r'(\^[^\s\<\>\[\]\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
+	'superscript':		r'(\^\\?[^\s\<\>\[\]\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
 }
 
 # same as above but for html tags instead
@@ -378,12 +382,12 @@ tagRe = {
 	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
 	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
 	'link':				r'(?i)(<a[^>]+?>[\s\S]+?</a>)',
-	'h1':				r'(\<h1\>[\s\S]+?\<\/h1\>)',
-	'h2':				r'(\<h2\>[\s\S]+?\<\/h2\>)',
-	'h3':				r'(\<h3\>[\s\S]+?\<\/h3\>)',
-	'h4':				r'(\<h4\>[\s\S]+?\<\/h4\>)',
-	'h5':				r'(\<h5\>[\s\S]+?\<\/h5\>)',
-	'h6':				r'(\<h6\>[\s\S]+?\<\/h6\>)',
+	'h1':				r'(\<h1\>[\s\S]*?\<\/h1\>)',
+	'h2':				r'(\<h2\>[\s\S]*?\<\/h2\>)',
+	'h3':				r'(\<h3\>[\s\S]*?\<\/h3\>)',
+	'h4':				r'(\<h4\>[\s\S]*?\<\/h4\>)',
+	'h5':				r'(\<h5\>[\s\S]*?\<\/h5\>)',
+	'h6':				r'(\<h6\>[\s\S]*?\<\/h6\>)',
 	'ul':				r'(\<ul\>[\s\S]+?\<\/ul\>)',
 	'ol':				r'(\<ol\>[\s\S]+?\<\/ol\>)',
 	'li':				r'(\<li\>[\s\S]+?\<\/li\>)',
@@ -391,7 +395,8 @@ tagRe = {
 	# so that we only grab the innermost tag at each pass
 	# to avoid getting crap matches like <sup><sup>word</sup>
 	# 'sup':				r'(\s\<sup\>[\S]+\<\/sup\>\s)',
-	'sup':				r'(\s\<sup\>\([^\(\)]+\)\<\/sup\>\s)',
+	# 'supP':				r'(\s\<sup\>\([^\(\)]+\)\<\/sup\>\s)',
+	'sup':				r'(\<sup\>[\s\S]+?\<\/sup\>)',
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
 	'asterisks':		r'(\<asterisks\>[\s\S]+?\<\/asterisks\>)',
@@ -440,31 +445,40 @@ def convertAndClean(body):
 	newbody = body + ""
 	# newbody = replaceSingleAsterisk(newbody)
 	# newbody = replaceMultiAsterisk(newbody)
-	# fix this
-	# newbody = addSupSpace(newbody)
-	# tempbody = ''
-	# while tempbody != newbody:
-	# 	tempbody = newbody
-	# 	newbody = replaceSuperscriptTags(tempbody)
-	# 	newbody = addSupSpace(newbody)
-	# newbody = markdown(newbody)
+	newbody = newbody.replace('&nbsp;',' ')
+	newbody = newbody.replace('&#39;',"'")
+	newbody = newbody.replace('&quot;','"')
+	newbody = newbody.replace('&gt;','>')
+	newbody = newbody.replace('&lt;','<')
+	newbody = newbody.replace('&amp;','&')
 	# tempbody = ''
 	# while tempbody != newbody:
 	# 	tempbody = newbody
 	# 	newbody = replaceSuperscriptTags(tempbody)
 	# 	newbody = addSupSpace(newbody)
 	newbody = markdown(newbody)
+	newbody = newbody.replace('&nbsp;',' ')
+	newbody = newbody.replace('&#39;',"'")
+	newbody = newbody.replace('&quot;','"')
 	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&lt;','<')
 	newbody = newbody.replace('&amp;','&')
+	# tempbody = ''
+	# while tempbody != newbody:
+	# 	tempbody = newbody
+	# 	newbody = replaceSuperscriptTags(tempbody)
+	# 	newbody = addSupSpace(newbody)
+	
 	# old markdown parser - new one (mistune) seems to screw up less
 	# newbody = md.markdown(newbody)
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
 	# newbody = replaceStrikethroughTags(newbody)
 	newbody = newbody.replace('<hr />', '')
+	newbody = newbody.replace('<hr/>', '')
 	newbody = newbody.replace('<hr>','')
 	newbody = newbody.replace('<br />', '')
+	newbody = newbody.replace('<br/>', '')
 	newbody = newbody.replace('<br>','')
 	newbody = fixEmptyLinkTags(newbody)
 	newbody = fixFalseEmTags(newbody)
@@ -520,7 +534,7 @@ def replaceMultiAsterisk(body):
 	matchObjs = re.finditer(markRe['multiAsterisk'],body)
 	for obj in matchObjs:
 		asterisksRemoved = obj.group().replace('*','')
-		newObjText = '<asterisks>' + asterisksRemoved + '</asterisks>'
+		newObjText = '<strong><em>' + asterisksRemoved + '</em></strong>'
 		newbody = newbody[:obj.start()]+newObjText+newbody[obj.end():]
 	return newbody
 
@@ -674,9 +688,9 @@ def stripTag(tObj, body):
 			o = len(tObj['style'])+13
 			c = 5
 	# because of parentheses, extra space (both hacks)
-	elif tObj['type'] == 'sup':
-		o += 2
-		c += 2
+	# elif tObj['type'] == 'sup':
+	# 	o += 2
+	# 	c += 2
 		
 	# remove end tag first because indices count from start of string
 	newbody = newbody[0:e-c] + newbody[e:]
@@ -737,6 +751,8 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 
 	print('Loading data from',dataFile)
 	data = open(dataFile,'r', encoding='utf-8')
+
+	numExistingComments = int(dataFile.split('-')[1])*500000
 
 	# get total lines
 	for i,l in enumerate(data):
