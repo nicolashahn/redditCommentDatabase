@@ -1,5 +1,12 @@
 insert into datasets (dataset_id = 6,name = 'reddit', source_url = 'http://www.reddit.com', description = 'link and image board');
 
+create table subdreddits (
+					dataset_id tinyint(3),
+                    subreddit_id int(20) unsigned,
+                    subreddit_name varchar(255),
+                    subreddit_native_id varchar(20)
+                    );
+
 set sql_mode = 'STRICT_ALL_TABLES';
 alter table discussions change native_discussion_id native_discussion_id varchar(12);
 
