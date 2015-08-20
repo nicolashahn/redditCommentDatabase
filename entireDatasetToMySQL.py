@@ -31,7 +31,6 @@ reddit_id = 6
 batch_size = 1000
 
 # reuse parser for faster results
-# markdown = mistune.Markdown()
 markdown = snudown.markdown
 
 # {native_id: db_id}
@@ -256,7 +255,6 @@ def addMarkupsAndTextToSession(jObj, session):
 		# try to get more tags in case we have nested quotes or some such
 		new_tObjs = getAllTagObjects(body, tag_inc)
 		tObjs = orig_tObjs + new_tObjs
-	# [print(t) for t in tObjs]
 	tObjs = addTextToTagObjects(tObjs, body)
 	tObjs = groupTagObjects(tObjs)
 	for tObj in tObjs:
@@ -414,11 +412,6 @@ def convertAndClean(body):
 	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&lt;','<')
 	newbody = newbody.replace('&amp;','&')
-	# tempbody = ''
-	# while tempbody != newbody:
-	# 	tempbody = newbody
-	# 	newbody = replaceSuperscriptTags(tempbody)
-	# 	newbody = addSupSpace(newbody)
 	newbody = markdown(newbody)
 	newbody = newbody.replace('&nbsp;',' ')
 	newbody = newbody.replace('&#39;',"'")
@@ -426,8 +419,6 @@ def convertAndClean(body):
 	newbody = newbody.replace('&gt;','>')
 	newbody = newbody.replace('&lt;','<')
 	newbody = newbody.replace('&amp;','&')
-	# old markdown parser - new one (mistune) seems to screw up less
-	# newbody = md.markdown(newbody)
 	newbody = newbody.replace('<p>','')
 	newbody = newbody.replace('</p>','')
 	newbody = newbody.replace('<hr />', '')
