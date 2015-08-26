@@ -10,6 +10,7 @@
 
 import json
 import sqlalchemy as s
+import oursql
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.dialects import mysql
@@ -125,7 +126,7 @@ class Incrementer():
 # open connection to database
 # then return engine object
 def connect(username, password, database):
-	db_uri = 'mysql://{}:{}@{}'.format(username, password, database)
+	db_uri = 'mysql+oursql://{}:{}@{}'.format(username, password, database)
 	engine = s.create_engine(db_uri, encoding='utf-8')
 	engine.connect()
 	return engine
@@ -329,9 +330,9 @@ def addPostToSession(jObj, session):
 markRe = {
 	'italic':			r'(?<!\*)([\*][^\*]+[\*])(?!\*)',
 	# stuff like ****CRASH****
-	'multiAsterisk':	r'(\*{3,}[^\*]+\*{3,})',		
+	'multiAsterisk':		r'(\*{3,}[^\*]+\*{3,})',		
 	'bold':				r'(\*{2}[^\*]+\*{2})',
-	'strikethrough': 	r'(\~{2}[^\*]+\~{2})',
+	'strikethrough': 		r'(\~{2}[^\*]+\~{2})',
 	'quote':			r'(&gt;[^\*\n]+\n)',
 	'link':				r'(\[.*\]\([^\)\s]+\))',
 	'header':			r'(\#+.+\s)',
@@ -340,7 +341,7 @@ markRe = {
 	# ordered list item
 	'olist':			r'([0-9]+\. .*\n)',
 	'supPar':			r'(\^\([^\)]*?\))',
-	'superscript':		r'(\^\\?[^\s\<\>\[\]\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
+	'superscript':			r'(\^\\?[^\s\<\>\[\]\)\(]+)(?=[\s\n\<\>\]\[\)\(])?',
 }
 
 # same as above but for html tags instead
@@ -348,7 +349,7 @@ tagRe = {
 	'em':				r'(\<em\>[\s\S]+?\<\/em\>)',
 	'strong':			r'(\<strong\>[\s\S]+?\<\/strong\>)',
 	'strike': 			r'(\<strike\>[\s\S]+?\<\/strike\>)',
-	'blockquote':		r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
+	'blockquote':			r'(\<blockquote\>[\s\S]+?\<\/blockquote\>)',
 	'link':				r'(?i)(<a[^>]+?>[\s\S]+?</a>)',
 	'h1':				r'(\<h1\>[\s\S]*?\<\/h1\>)',
 	'h2':				r'(\<h2\>[\s\S]*?\<\/h2\>)',
@@ -362,7 +363,7 @@ tagRe = {
 	'sup':				r'(\<sup\>[\s\S]+?\<\/sup\>)',
 	'pre':				r'(\<pre\>[\s\S]+?\<\/pre\>)',
 	'code':				r'(\<code\>[\s\S]+?\<\/code\>)',
-	'asterisks':		r'(\<asterisks\>[\s\S]+?\<\/asterisks\>)',
+	'asterisks':			r'(\<asterisks\>[\s\S]+?\<\/asterisks\>)',
 	'del':				r'(\<del\>[\s\S]+?\<\/del\>)',
 	'table':			r'(\<table\>[\s\S]+?\<\/table\>)',
 	'thead':			r'(\<thead\>[\s\S]+?\<\/thead\>)',
@@ -378,7 +379,7 @@ tagToType = {
 	'em':				'italic',
 	'strong':			'bold',
 	'strike': 			'strikethrough',
-	'blockquote':		'quote',
+	'blockquote':			'quote',
 	'link':				'link',
 	'h1':				'header1',
 	'h2':				'header2',
@@ -393,7 +394,7 @@ tagToType = {
 	'supP':				'superscript',
 	'pre':				'pre',
 	'code':				'code',
-	'asterisks':		'boldAndItalic',
+	'asterisks':			'boldAndItalic',
 	'del':				'deleted',
 	'table':			'table',
 	'thead':			'tableHead',
@@ -445,11 +446,14 @@ def fixEmptyLinkTags(body):
 		# <a href="/link"></a>
 		bothTags = obj.group()
 		# /link in above
-		url = re.findall(urlRe,bothTags)[0]
-		# replace bothTags with <a href="/link">/link</a>
-		newBothTags = bothTags.replace('"></a>','">'+url+'</a>')
-		# now put it back into the body
-		newbody = newbody.replace(bothTags,newBothTags)
+		
+		urlmatches = re.findall(urlRe,bothTags)
+		if len(urlmatches)>0:
+			url = urlmatches[0]
+			# replace bothTags with <a href="/link">/link</a>
+			newBothTags = bothTags.replace('"></a>','">'+url+'</a>')
+			# now put it back into the body
+			newbody = newbody.replace(bothTags,newBothTags)
 	return newbody
 
 # extreme corner case:
@@ -657,7 +661,11 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 					createTableObjects(jObj,session)
 				print("Pushing comments up to",comment_index)
 				sys.stdout.flush()
-				session.commit()
+				if comment_index > 12035000:
+					try:
+						session.commit()
+					except Exception:
+						pass
 				jObjs = []
 			comment_index += 1
 	session.commit()
