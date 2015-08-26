@@ -672,10 +672,10 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 				print("Pushing comments up to",comment_index)
 				sys.stdout.flush()
 				if comment_index > 12035000:
-					try:
-						session.commit()
-					except Exception:
-						pass
+					session.commit()
+				else:
+					# effectively throw away comments until we're up to where we left off
+					session = createSession(eng)
 				jObjs = []
 			comment_index += 1
 	session.commit()
