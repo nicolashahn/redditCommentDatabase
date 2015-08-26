@@ -1,5 +1,5 @@
 /*
-# Initial setup of db for reddit
+# initial setup of db for reddit
 insert into datasets values(6, 'reddit', 'http://www.reddit.com', 'link and image board');
 
 create table subreddits (
@@ -28,7 +28,11 @@ alter table post_stances drop foreign key post_stances_ibfk_1;
 alter table mturk_2010_qr_entries drop foreign key mturk_2010_qr_entries_ibfk_1;
 alter table mturk_2010_qr_entries drop foreign key mturk_2010_qr_entries_ibfk_2;
 alter table mturk_2010_p123_posts drop foreign key mturk_2010_p123_posts_ibfk_1;
-*/
+
+
+
+
+
 
 # embiggen number of posts the db can hold
 ALTER TABLE `iac`.`posts` 
@@ -44,16 +48,16 @@ ALTER TABLE `iac`.`mturk_2010_qr_entries`
 CHANGE COLUMN `post_id` `post_id` INT(20) UNSIGNED NOT NULL DEFAULT '0' COMMENT '' ;
 ALTER TABLE `iac`.`mturk_2010_p123_posts` 
 CHANGE COLUMN `post_id` `post_id` INT(20) UNSIGNED NOT NULL DEFAULT '0' COMMENT '' ;
-/*
+
 # add the foreign constraints back in
 alter table quotes add foreign key `quotes_ibfk_1` (`dataset_id`,`discussion_id`,`post_id`) references `posts` (`dataset_id`, `discussion_id`, `post_id`);
 alter table post_stances add foreign key `post_stances_ibfk_1` (`dataset_id`,`discussion_id`,`post_id`) references `posts` (`dataset_id`, `discussion_id`, `post_id`);
 alter table mturk_2010_qr_entries add foreign key `mturk_2010_qr_entries_ibfk_1` (`dataset_id`,`discussion_id`,`post_id`) references `posts` (`dataset_id`, `discussion_id`, `post_id`);
-alter table mturk_2010_qr_entries add foreign key `mturk_2010_qr_entries_ibfk_2` (`dataset_id`,`discussion_id`,`post_id`,`quote_index`) references `posts` (`dataset_id`, `discussion_id`, `post_id`, `quote_index`);
+alter table mturk_2010_qr_entries add foreign key `mturk_2010_qr_entries_ibfk_2` (`dataset_id`,`discussion_id`,`post_id`,`quote_index`) references `quotes` (`dataset_id`, `discussion_id`, `post_id`, `quote_index`);
 alter table mturk_2010_p123_posts add foreign key `mturk_2010_p123_posts_ibfk_1` (`dataset_id`,`discussion_id`,`post_id`) references `posts` (`dataset_id`, `discussion_id`, `post_id`);
-*/
-/*
-# looks like composite foreign key - how to deal with?
+
+
+# the original create table commands for tables affected by above post_id change
 CREATE TABLE `quotes` (
   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',
   `discussion_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
