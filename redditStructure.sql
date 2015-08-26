@@ -19,6 +19,17 @@ alter table discussions add subreddit_id int(10);
 alter table basic_markup add markup_group_id int(11);
 */
 
+alter table quotes drop foreign key post_id;
+alter table post_stances drop foreign key post_id;
+alter table mturk_2010_qr_entries drop foreign key post_id;
+alter table mturk_2010_p123_posts drop foreign key post_id;
+
+/*
+# embiggen number of posts the db can hold
 ALTER TABLE `iac`.`posts` 
 CHANGE COLUMN `post_id` `post_id` INT(20) UNSIGNED NOT NULL DEFAULT '0' COMMENT '' ,
 CHANGE COLUMN `parent_post_id` `parent_post_id` INT(20) UNSIGNED NULL DEFAULT NULL COMMENT '' ;
+*/
+
+
+
