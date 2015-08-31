@@ -19,9 +19,7 @@ alter table discussions add subreddit_id int(10);
 
 alter table basic_markup add markup_group_id int(11);
 
-*/
 
-/*
 # remove fk constraints to change post_id from mediumint -> int
 alter table quotes drop foreign key quotes_ibfk_1;
 alter table post_stances drop foreign key post_stances_ibfk_1;
@@ -56,7 +54,7 @@ alter table mturk_2010_qr_entries add foreign key `mturk_2010_qr_entries_ibfk_1`
 alter table mturk_2010_qr_entries add foreign key `mturk_2010_qr_entries_ibfk_2` (`dataset_id`,`discussion_id`,`post_id`,`quote_index`) references `quotes` (`dataset_id`, `discussion_id`, `post_id`, `quote_index`);
 alter table mturk_2010_p123_posts add foreign key `mturk_2010_p123_posts_ibfk_1` (`dataset_id`,`discussion_id`,`post_id`) references `posts` (`dataset_id`, `discussion_id`, `post_id`);
 
-
+/*
 # the original create table commands for tables affected by above post_id change
 CREATE TABLE `quotes` (
   `dataset_id` tinyint(3) unsigned NOT NULL DEFAULT '0',

@@ -159,17 +159,7 @@ def generateTableClasses(eng):
 	Post = ABase.classes.posts
 	Discussion = ABase.classes.discussions
 	Subreddit = ABase.classes.subreddits
-	Text = ABase.classes.texts
-
-	# maximum id's currently in database
-	# post_id 		= 12035000
-	# text_id 		= 12035000
-	# author_id 	= 1289759
-	# subreddit_id  = 27005
-	# discussion_id = 930667
-
-	# change post_id, parent_post_id, every foreign key that references those
-
+	Text = ABase.classes.text
 
 
 ####################################
@@ -456,7 +446,6 @@ def fixEmptyLinkTags(body):
 		# <a href="/link"></a>
 		bothTags = obj.group()
 		# /link in above
-		
 		urlmatches = re.findall(urlRe,bothTags)
 		if len(urlmatches)>0:
 			url = urlmatches[0]
