@@ -16,8 +16,6 @@ from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.dialects import mysql
 import sys
 import re
-# import markdown2 as md
-# import mistune
 import snudown
 import datetime
 # from sshtunnel import SSHTunnelForwarder
@@ -127,6 +125,7 @@ class Incrementer():
 # open connection to database
 # then return engine object
 def connect(username, password, database):
+	# for running on local machine, not MySQL server:
 	# server = SSHTunnelForwarder(
 	# 	('host',22),
 	# 	ssh_password='nbhnbhnbh',
@@ -251,17 +250,12 @@ def addMarkupsAndTextToSession(jObj, session):
 	jObj['text_iac_id'] = text_inc.inc()
 	tag_inc = Incrementer()
 	body = jObj['body']
-	# tempOut.write('\n\n'+jObj['name']+'\n')
-	# tempOut.write("___ORIGINAL___:\n"+body+'\n\n')
 	body, addedTags = convertAndClean(body)
-	# tempOut.write("___TAGS_ADDED___:\n"+body+'\n\n')
 	tObjs = getAllTagObjects(body, tag_inc)
 	# to keep track of if we're still getting more tags
 	new_tObjs = tObjs
 	while len(new_tObjs) != 0:
 		orig_tObjs, body = stripTagsAndFixStartEnd(tObjs, body)
-		# tempOut.write("___NEW___:\n"+body+'\n\n')
-		# [tempOut.write(str(tObj)+"\n") for tObj in sorted(tObjs, key=lambda k: k['start'])]
 		# try to get more tags in case we have nested quotes or some such
 		new_tObjs = getAllTagObjects(body, tag_inc)
 		tObjs = orig_tObjs + new_tObjs
@@ -270,12 +264,9 @@ def addMarkupsAndTextToSession(jObj, session):
 	for tObj in tObjs:
 		addTagObjectToSession(tObj, jObj, session)
 	jObj['newBody'] = body
-	# tempOut.write("___TAGS_REMOVED___:\n"+body+'\n\n')
 	addTextObjectToSession(jObj, session)
 
 def addTextObjectToSession(jObj, session):
-	# text_id = text_inc.inc()
-	# jObj['text_iac_id'] = text_id
 	text = Text(
 		dataset_id 	= reddit_id,
 		text_id 	= jObj['text_iac_id'],
@@ -288,7 +279,6 @@ def addTagObjectToSession(tObj, jObj, session):
 		print("warning: start index > end index for tag in post",jObj['name'],"with tag id",tObj['id'])
 	if tObj['start'] < 0:
 		print("warning: start index < 0 for tag in post",jObj['name'],"with tag id",tObj['id'])
-	# this is a hack
 	if tObj['end'] >= 0 and tObj['start'] >= 0:	
 		basic_markup = Basic_Markup(
 			dataset_id 		= reddit_id,
@@ -524,7 +514,6 @@ def matchToTagObject(match, tag, body, tag_inc):
 			tObj['style'] = firstTag[11:-2]
 	return tObj
 
-# maybe the most frustrating bit of code I've written
 # takes list of tag objects, removes their tags from the body, 
 # and fixes their start,end positions to account for missing tags
 def stripTagsAndFixStartEnd(tObjs, body):
@@ -594,7 +583,6 @@ def stripTag(tObj, body):
 		if tObj['style'] != None:
 			o = len(tObj['style'])+13
 			c = 5
-		
 	# remove end tag first because indices count from start of string
 	newbody = newbody[0:e-c] + newbody[e:]
 	newbody = newbody[0:s] + newbody[s+o:]
@@ -669,6 +657,7 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 					createTableObjects(jObj,session)
 				print("Pushing comments up to",comment_index)
 				sys.stdout.flush()
+				# only push uncommitted comments
 				if comment_index > 44739000:
 					session.commit()
 				else:
