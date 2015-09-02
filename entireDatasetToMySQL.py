@@ -20,6 +20,7 @@ import re
 # import mistune
 import snudown
 import datetime
+# from sshtunnel import SSHTunnelForwarder
 
 ###################################
 # Global variables
@@ -116,7 +117,7 @@ def removeNonUnicode(jObj):
 # incrementer class for id fields
 # each table class gets one
 class Incrementer():
-	def __init__(initial=0):
+	def __init__(self,initial=0):
 		self.i = initial
 
 	def inc(self):
@@ -126,7 +127,15 @@ class Incrementer():
 # open connection to database
 # then return engine object
 def connect(username, password, database):
-	db_uri = 'mysql+oursql://{}:{}@{}'.format(username, password, database)
+	# server = SSHTunnelForwarder(
+	# 	('host',22),
+	# 	ssh_password='nbhnbhnbh',
+	# 	ssh_username='nick',
+	# 	remote_bind_address=('')
+	# 	)
+
+	db_uri = 'mysql+oursql://{}:{}@127.0.0.1:{}'.format(username, password, database)
+	# db_uri = 'mysql://{}:{}@{}'.format(username, password, database)
 	engine = s.create_engine(db_uri, encoding='utf-8')
 	engine.connect()
 	return engine
@@ -159,7 +168,7 @@ def generateTableClasses(eng):
 	Post = ABase.classes.posts
 	Discussion = ABase.classes.discussions
 	Subreddit = ABase.classes.subreddits
-	Text = ABase.classes.text
+	Text = ABase.classes.texts
 
 
 ####################################
@@ -660,7 +669,7 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 					createTableObjects(jObj,session)
 				print("Pushing comments up to",comment_index)
 				sys.stdout.flush()
-				if comment_index > 12035000:
+				if comment_index > 44739000:
 					session.commit()
 				else:
 					# effectively throw away comments until we're up to where we left off
