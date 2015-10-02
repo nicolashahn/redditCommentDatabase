@@ -116,7 +116,7 @@ def removeNonUnicode(jObj):
 # incrementer class for id fields
 # each table class gets one
 class Incrementer():
-	def __init__(initial=0):
+	def __init__(self,initial=0):
 		self.i = initial
 
 	def inc(self):
@@ -159,7 +159,7 @@ def generateTableClasses(eng):
 	Post = ABase.classes.posts
 	Discussion = ABase.classes.discussions
 	Subreddit = ABase.classes.subreddits
-	Text = ABase.classes.text
+	Text = ABase.classes.texts
 
 
 ####################################
@@ -660,7 +660,7 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 					createTableObjects(jObj,session)
 				print("Pushing comments up to",comment_index)
 				sys.stdout.flush()
-				if comment_index > 12035000:
+				if comment_index > 44739000:
 					session.commit()
 				else:
 					# effectively throw away comments until we're up to where we left off
