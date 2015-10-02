@@ -10,6 +10,7 @@
 
 import json
 import sqlalchemy as s
+import oursql
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.dialects import mysql
@@ -115,8 +116,8 @@ def removeNonUnicode(jObj):
 # incrementer class for id fields
 # each table class gets one
 class Incrementer():
-	def __init__(self):
-		self.i = 0
+	def __init__(initial=0):
+		self.i = initial
 
 	def inc(self):
 		self.i += 1
@@ -125,7 +126,7 @@ class Incrementer():
 # open connection to database
 # then return engine object
 def connect(username, password, database):
-	db_uri = 'mysql://{}:{}@{}'.format(username, password, database)
+	db_uri = 'mysql+oursql://{}:{}@{}'.format(username, password, database)
 	engine = s.create_engine(db_uri, encoding='utf-8')
 	engine.connect()
 	return engine
@@ -158,7 +159,7 @@ def generateTableClasses(eng):
 	Post = ABase.classes.posts
 	Discussion = ABase.classes.discussions
 	Subreddit = ABase.classes.subreddits
-	Text = ABase.classes.texts
+	Text = ABase.classes.text
 
 
 ####################################
@@ -207,6 +208,11 @@ def addSubredditToSession(jObj, session):
 # works basically the same as subreddit
 # todo: create a script to run after all insertions to fill in url, title
 def addDiscussionToSession(jObj, session):
+	# MODIFIED FROM ENTIREDATABASETOMYSQL.PY
+	# because all discussion posts should be immediately sequential
+	# if we get to a new one, we don't need the old ones anymore
+	if jObj['link_id'] != link_dict[0]:
+		link_dict = {}
 	if jObj['link_id'] not in link_dict:
 		link_dict[jObj['link_id']] = discussion_inc.inc()
 		discussion = Discussion(
@@ -445,11 +451,13 @@ def fixEmptyLinkTags(body):
 		# <a href="/link"></a>
 		bothTags = obj.group()
 		# /link in above
-		url = re.findall(urlRe,bothTags)[0]
-		# replace bothTags with <a href="/link">/link</a>
-		newBothTags = bothTags.replace('"></a>','">'+url+'</a>')
-		# now put it back into the body
-		newbody = newbody.replace(bothTags,newBothTags)
+		urlmatches = re.findall(urlRe,bothTags)
+		if len(urlmatches)>0:
+			url = urlmatches[0]
+			# replace bothTags with <a href="/link">/link</a>
+			newBothTags = bothTags.replace('"></a>','">'+url+'</a>')
+			# now put it back into the body
+			newbody = newbody.replace(bothTags,newBothTags)
 	return newbody
 
 # extreme corner case:
@@ -657,7 +665,11 @@ def main(user=sys.argv[1],pword=sys.argv[2],db=sys.argv[3],dataFile=sys.argv[4])
 					createTableObjects(jObj,session)
 				print("Pushing comments up to",comment_index)
 				sys.stdout.flush()
-				session.commit()
+				if comment_index > 12035000:
+					session.commit()
+				else:
+					# effectively throw away comments until we're up to where we left off
+					session = createSession(eng)
 				jObjs = []
 			comment_index += 1
 	session.commit()
