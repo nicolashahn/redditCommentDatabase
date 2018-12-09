@@ -125,14 +125,6 @@ class Incrementer():
 # open connection to database
 # then return engine object
 def connect(username, password, database):
-	# for running on local machine, not MySQL server:
-	# server = SSHTunnelForwarder(
-	# 	('host',22),
-	# 	ssh_password='nbhnbhnbh',
-	# 	ssh_username='nick',
-	# 	remote_bind_address=('')
-	# 	)
-
 	db_uri = 'mysql+oursql://{}:{}@127.0.0.1:{}'.format(username, password, database)
 	# db_uri = 'mysql://{}:{}@{}'.format(username, password, database)
 	engine = s.create_engine(db_uri, encoding='utf-8')
